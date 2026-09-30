@@ -350,3 +350,13 @@ ASALocalRun/
 
 # Windows shortcut file
 *.lnk
+
+# Build
+build/
+
+# Misc
+.agents/
+.aws/
+.build-tools/
+.codex/
+.vscode/

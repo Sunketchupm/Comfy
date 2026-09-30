@@ -1,3 +1,6 @@
+## Developer notes
+The update to VS2026 and the port to be linux buildable are entirely vibecoded. There will be bugs and the vast majority of them I do not understand. Other changes made in this fork may be AI assisted, but mostly done by me.
+
 ## Comfy... Studio?
 Comfy Studio is a *totally epic ⚡⚡* Chart Editor for creating custom Project DIVA Arcade-Style charts for use in modding.  *Holy smokes*, would you believe it!
 
@@ -29,14 +32,16 @@ Letting it sit here to just rot away also feels kinda shitty for anybody who mig
 
 A lot of the code was me playing around, just having fun with different ideas and I guess also some kind of chart editor..? for some fucked up weeb game with dancing dolls 'n shit?? I dunno man, feels like a fever dream tbh.
 
+# AI Generated Docs Start
+
 ## Building the native Linux chart editor
 
-The Linux build produces a native 64-bit `ComfyStudio` executable. It uses the existing chart editor with SDL2 for windows, keyboard/mouse/controller input and audio, OpenGL for GUI and 2D rendering, FFmpeg for video previews, and OpenSSL for archive decryption. The Windows solution continues to use its existing backends.
+The Linux build produces a native 64-bit `ComfyStudio` executable.
 
-On Arch Linux, install the build and runtime dependencies:
+The following dependencies are needed:
 
 ```sh
-sudo pacman -S --needed clang python ninja pkgconf sdl2-compat glew mesa openssl zlib libvorbis ffmpeg zenity
+clang python ninja pkgconf sdl2-compat glew mesa openssl zlib libvorbis ffmpeg zenity
 ```
 
 From the source directory, build and run:
@@ -64,9 +69,9 @@ Run the Linux checks with:
 python tools/build-linux.py --test
 ```
 
-These checks exercise Unicode file I/O, archive AES decryption, DDS texture decoding, chart save/load roundtrips, OpenGL rendering, and normal editor startup and shutdown. When `dev_rom/` is present in the build directory, they also decode and upload the supplied game textures, load the font map, decode the sound banks, and open an SDL audio stream. The startup test saves `linux-editor-smoke.png` in the build directory. Rendering and startup tests use SDL's offscreen video driver and dummy audio driver. They require an OpenGL-capable offscreen driver, such as Mesa, and do not verify physical audio devices or controllers.
+These checks exercise Unicode file I/O, archive AES decryption, DDS texture decoding, chart save/load roundtrips, OpenGL rendering, and normal editor startup and shutdown. When `dev_rom/` is present in the build directory, they also decode and upload the supplied game textures, load the font map, decode the sound banks, and open an SDL audio stream. A rendered HUD/font preview is saved as `linux-chart-preview.png`. When the `ffmpeg` command is installed, a generated 1080p video fixture also checks rapid seeking, playback immediately after a cursor seek, end-of-file handling, reopening, and GPU texture reuse. Audio checks verify callback buffer sizes and device shutdown; navigation-key checks cover arrows, Home/End, Page Up/Down, and both function-key ranges. The startup test saves `linux-editor-smoke.png` in the build directory. Rendering and startup tests use SDL's offscreen video driver and dummy audio driver. They require an OpenGL-capable offscreen driver, such as Mesa, and do not verify physical audio devices or controllers.
 
-The initial Linux port focuses on the chart editor. The unfinished Aet and 3D/PV editors are excluded. Docking works inside the main window; detached OS-level ImGui windows are not implemented. SDL provides shared audio device access; WASAPI exclusive mode is available only on Windows. Video previews use the separate chart song for audio, as the Windows player does. Linux video opening and seeking run synchronously. MSAA and some less common Aet blend modes do not yet match the Windows renderer. Offline YACbCr texture export is unavailable; existing YACbCr game textures can be decoded. Optional Discord rich presence needs a separately supplied `libdiscord_game_sdk.so`.
+The initial Linux port focuses on the chart editor. The unfinished Aet and 3D/PV editors are excluded. Docking works inside the main window; detached OS-level ImGui windows are not implemented. SDL provides shared audio device access with a minimum 1024-frame buffer (about 23 ms at 44.1 kHz) to allow for desktop scheduling jitter; smaller saved buffer requests are raised to this minimum. Buffer requests are rounded up to a power of two. WASAPI exclusive mode is available only on Windows. Video previews use the separate chart song for audio, as the Windows player does. Linux video file opening runs synchronously; decoding and seeking run on a worker thread. Rapid timeline seeks replace pending requests, and the preview keeps its previous frame until the new one is ready. Ordinary playback updates do not cancel a pending decode. MSAA and some less common Aet blend modes do not yet match the Windows renderer. Offline YACbCr texture export is unavailable; existing YACbCr game textures can be decoded. Optional Discord rich presence needs a separately supplied `libdiscord_game_sdk.so`.
 
 ## Building with Visual Studio 2026
 
@@ -81,6 +86,8 @@ msbuild Comfy.sln /m /p:Configuration=Release /p:Platform=x64
 All projects, including the bundled dependencies, use the v145 toolset. The Windows SDK version is set to `10.0`, which selects the latest installed SDK instead of requiring the old 10.0.17763.0 SDK. MSBuild uses the current installed version, and the solution requires Visual Studio 2026 or newer.
 
 The existing build scripts call the Release versions of `ComfyVersion.exe` and `ComfyDataBuild.exe`, so build Release first before building Debug. The version generator uses Git during a normal Windows build. Runtime game files are still required as described below.
+
+# AI Generated Docs End
 
 ## The Tower of Babel
 Schizo rambling over with, the overall project structure I *think* was about the following:

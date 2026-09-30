@@ -1,6 +1,7 @@
 #pragma once
 #include "Audio/Core/Backend/IAudioBackend.h"
 #include <SDL.h>
+#include <algorithm>
 namespace Comfy::Audio
 {
     class SDLBackend final : public IAudioBackend
@@ -10,13 +11,24 @@ namespace Comfy::Audio
         bool OpenStartStream(const StreamParameters& parameters, RenderCallbackFunc callback) override
         {
             StopCloseStream();
+            if (!callback || parameters.SampleRate == 0 || parameters.ChannelCount == 0 || parameters.ChannelCount > 255)
+                return false;
+
             renderCallback = std::move(callback);
             channelCount = parameters.ChannelCount;
             SDL_AudioSpec requested = {};
             requested.freq = parameters.SampleRate;
             requested.format = AUDIO_S16SYS;
             requested.channels = parameters.ChannelCount;
-            requested.samples = parameters.DesiredFrameCount;
+            // Tiny Windows buffers can force the shared Linux audio graph to run
+            // too frequently. Keep enough headroom for desktop scheduling jitter.
+            // SDL expects a power of two; 32768 also fits its Uint16 sample count
+            // and the engine's 44100-frame mixing buffer.
+            const u32 desiredFrames = std::clamp(parameters.DesiredFrameCount, 1024u, 32768u);
+            u32 bufferFrames = 1024;
+            while (bufferFrames < desiredFrames)
+                bufferFrames *= 2;
+            requested.samples = static_cast<Uint16>(bufferFrames);
             requested.userdata = this;
             requested.callback = [](void* user, Uint8* buffer, int bytes)
             {
@@ -26,7 +38,10 @@ namespace Comfy::Audio
             };
             device = SDL_OpenAudioDevice(nullptr, 0, &requested, nullptr, 0);
             if (!device)
+            {
+                renderCallback = {};
                 return false;
+            }
             SDL_PauseAudioDevice(device, 0);
             return true;
         }

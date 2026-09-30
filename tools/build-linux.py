@@ -144,7 +144,16 @@ def main():
         shutil.copytree(ROOT / 'ComfyStudio/manual', build_directory / 'manual', dirs_exist_ok=True)
     if arguments.test:
         environment = dict(os.environ, SDL_VIDEODRIVER='offscreen', SDL_AUDIODRIVER='dummy')
-        tests = [[], ['--render'], ['--editor']]
+        tests = [[], ['--render'], ['--audio'], ['--editor']]
+        if shutil.which('ffmpeg'):
+            fixture = build_directory / 'linux-video-seek-test.mp4'
+            subprocess.run([
+                'ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=1920x1080:r=30:d=3',
+                '-f', 'lavfi', '-i', 'color=c=blue:s=1920x1080:r=30:d=3',
+                '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]', '-map', '[v]',
+                '-c:v', 'mpeg4', '-q:v', '3', '-g', '180', '-bf', '2', '-y', str(fixture),
+            ], check=True, timeout=30)
+            tests.append(['--video', str(fixture)])
         if (build_directory / 'dev_rom').is_dir():
             tests.insert(2, ['--assets'])
         for test_arguments in tests:

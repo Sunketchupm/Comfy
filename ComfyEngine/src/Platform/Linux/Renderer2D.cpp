@@ -119,8 +119,8 @@ namespace Comfy::Render
             MaskProgram = CreateSpriteProgram("#version 120\n"
                 "uniform sampler2D sprite; uniform sampler2D mask; uniform int textured;"
                 "varying vec2 uv; varying vec2 maskUV; varying vec4 color;"
-                "void main() { vec4 pixel = textured != 0 ? texture2D(sprite, maskUV) : vec4(1.0);"
-                "gl_FragColor = pixel * color; gl_FragColor.a *= texture2D(mask, uv).a; }");
+                "void main() { vec4 pixel = textured != 0 ? texture2D(sprite, vec2(maskUV.x, 1.0 - maskUV.y)) : vec4(1.0);"
+                "gl_FragColor = pixel * color; gl_FragColor.a *= texture2D(mask, vec2(uv.x, 1.0 - uv.y)).a; }");
             PostProcessProgram = CreateSpriteProgram("#version 120\n"
                 "uniform sampler2D image; uniform float gamma; uniform float contrast;"
                 "uniform vec3 coefficientR; uniform vec3 coefficientG; uniform vec3 coefficientB;"
@@ -211,14 +211,31 @@ namespace Comfy::Render
         }
         else
             glDisable(GL_TEXTURE_2D);
-        GLenum mode = GL_TRIANGLES;
-        if (primitive == Graphics::PrimitiveType::TriangleStrip)
-            mode = GL_TRIANGLE_STRIP;
+        // The placement grid supplies independent line segments. Preserve the
+        // requested topology instead of interpreting every vertex list as triangles.
+        GLenum mode;
+        switch (primitive)
+        {
+        case Graphics::PrimitiveType::Points: mode = GL_POINTS; break;
+        case Graphics::PrimitiveType::Lines: mode = GL_LINES; break;
+        case Graphics::PrimitiveType::LineStrip: mode = GL_LINE_STRIP; break;
+        case Graphics::PrimitiveType::LineLoop: mode = GL_LINE_LOOP; break;
+        case Graphics::PrimitiveType::Triangles: mode = GL_TRIANGLES; break;
+        case Graphics::PrimitiveType::TriangleStrip: mode = GL_TRIANGLE_STRIP; break;
+        case Graphics::PrimitiveType::TriangleFan: mode = GL_TRIANGLE_FAN; break;
+        case Graphics::PrimitiveType::Quads: mode = GL_QUADS; break;
+        case Graphics::PrimitiveType::QuadStrip: mode = GL_QUAD_STRIP; break;
+        case Graphics::PrimitiveType::Polygon: mode = GL_POLYGON; break;
+        default: throw std::invalid_argument("Unsupported 2D primitive type");
+        }
         glBegin(mode);
         for (size_t index = 0; index < count; index++)
         {
             glColor4fv(glm::value_ptr(vertices[index].Color));
-            glTexCoord2fv(glm::value_ptr(vertices[index].TextureCoordinates));
+            // Sprite regions use top-left coordinates, while game atlas pixels
+            // are stored bottom-up. Match the Windows sprite vertex shader.
+            const auto uv = vertices[index].TextureCoordinates;
+            glTexCoord2f(uv.x, 1.0f - uv.y);
             glVertex2fv(glm::value_ptr(vertices[index].Position));
         }
         glEnd();

@@ -13,6 +13,12 @@
 #include <dlfcn.h>
 #include "Misc/ImageHelper.h"
 #include "Audio/Misc/SfxArchive.h"
+#include "Platform/Linux/SDLBackend.h"
+#include "Platform/Linux/OpenGL.h"
+#include "Editor/Chart/RenderWindow/TargetRenderHelper.h"
+#include "Editor/Chart/ChartEditor.h"
+#include "Editor/Chart/RenderWindow/TargetGrid.h"
+#include <atomic>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -130,12 +136,94 @@ namespace
         const size_t center = (8 * 16 + 8) * 4;
         Require(screenshot && screenshot[center] > 250 && screenshot[center + 1] == 0
                 && screenshot[center + 2] == 0, "OpenGL did not render the expected red rectangle");
+        Graphics::Tex atlas;
+        auto& mip = atlas.MipMapsArray.emplace_back().emplace_back();
+        mip.Size = {4, 4};
+        mip.Format = Graphics::TextureFormat::RGBA8;
+        mip.DataSize = 64;
+        mip.Data = std::make_unique<u8[]>(64);
+        for (int y = 0; y < 4; y++)
+            for (int x = 0; x < 4; x++)
+            {
+                const int offset = (y * 4 + x) * 4;
+                mip.Data[offset] = x < 2 ? 255 : 0;
+                mip.Data[offset + 1] = y < 2 ? 255 : 0;
+                mip.Data[offset + 2] = x >= 2 && y >= 2 ? 255 : 0;
+                mip.Data[offset + 3] = 255;
+            }
+        Render::RenderCommand2D sprite;
+        sprite.TexView = &atlas;
+        sprite.TexView.Filter = Graphics::TextureFilter::Point;
+        // The top-right region of a bottom-up atlas contains the blue pixels.
+        sprite.SourceRegion = {2, 0, 2, 2};
+        sprite.Scale = {8, 8};
+        renderer.Begin(camera, *target);
+        renderer.Draw(sprite);
+        renderer.End();
+        const auto cropped = target->TakeScreenshot();
+        Require(cropped[center] == 0 && cropped[center + 1] == 0 && cropped[center + 2] == 255,
+                "Sprite atlas cropping sampled the wrong region");
+        // Top-down sources (for example decoded movie frames) opt out of the
+        // game atlas orientation. Test both halves so a whole-texture flip fails.
+        sprite.SourceRegion = {2, 0, 2, 4};
+        sprite.Scale = {8, 4};
+        atlas.GPU_FlipY = true;
+        renderer.Begin(camera, *target);
+        renderer.Draw(sprite);
+        renderer.End();
+        const auto topDown = target->TakeScreenshot();
+        const size_t upperPixel = (4 * 16 + 8) * 4;
+        const size_t lowerPixel = (12 * 16 + 8) * 4;
+        Require(topDown[upperPixel + 1] == 255 && topDown[upperPixel + 2] == 0
+                && topDown[lowerPixel + 1] == 0 && topDown[lowerPixel + 2] == 255,
+                "Top-down texture orientation is incorrect");
+        atlas.GPU_FlipY = false;
+
+        Graphics::Tex maskTexture;
+        auto& maskMip = maskTexture.MipMapsArray.emplace_back().emplace_back();
+        maskMip.Size = {4, 4};
+        maskMip.Format = Graphics::TextureFormat::RGBA8;
+        maskMip.DataSize = 64;
+        maskMip.Data = std::make_unique<u8[]>(64);
+        for (int pixel = 0; pixel < 16; pixel++)
+        {
+            std::fill(maskMip.Data.get() + pixel * 4, maskMip.Data.get() + pixel * 4 + 3, 255);
+            maskMip.Data[pixel * 4 + 3] = pixel >= 8 ? 255 : 0;
+        }
+        auto mask = sprite;
+        mask.TexView = &maskTexture;
+        renderer.Begin(camera, *target);
+        renderer.Draw(sprite, mask);
+        renderer.End();
+        const auto masked = target->TakeScreenshot();
+        Require(masked[upperPixel] == 0 && masked[upperPixel + 2] == 255
+                && masked[lowerPixel] == 0 && masked[lowerPixel + 1] == 0 && masked[lowerPixel + 2] == 0,
+                "Masked sprites sampled the wrong texture orientation");
         renderer.Begin(camera, *target);
         renderer.DrawRectCheckerboard({0,0}, {16,16}, {0,0}, 0, {1,1}, {1,1,1,1}, 0.25f);
         renderer.End();
         const auto checkerboard = target->TakeScreenshot();
         Require(checkerboard[0] == 0 && checkerboard[4 * 4] > 250, "Checkerboard shader did not alternate cells");
+
+        // Exercise the real grid vertex list: filled triangles can still pass
+        // ordinary sprite tests, but cover far more pixels than grid lines do.
+        target->Param.Resolution = {1920, 1080};
+        camera.ProjectionSize = {1920, 1080};
+        renderer.Begin(camera, *target);
+        Studio::Editor::RenderTargetGrid(renderer, true);
+        renderer.End();
+        const auto grid = target->TakeScreenshot();
+        const size_t pixelCount = size_t(1920) * 1080;
+        size_t litPixels = 0;
+        for (size_t pixel = 0; pixel < pixelCount; pixel++)
+            if (grid[pixel * 4] != 0)
+                litPixels++;
+        Require(litPixels > 10000 && litPixels < pixelCount / 5,
+                "Placement grid is missing lines or contains filled polygons");
+        Require(Util::WriteImage("linux-placement-grid.png", target->Param.Resolution, grid.get()),
+                "Cannot save the placement grid screenshot");
     }
+    void TestChartPreview(Render::Renderer2D& renderer);
     void TestGameAssets()
     {
         System::MountComfyData();
@@ -177,7 +265,169 @@ namespace
         audio.OpenStartStream();
         Require(audio.GetIsStreamOpenRunning(), "SDL audio stream did not start");
         audio.StopCloseStream();
+        TestChartPreview(renderer);
         std::cout << "Loaded " << textures << " game textures and " << sounds << " sounds\n";
+    }
+    void TestNavigationKeys()
+    {
+        const std::pair<SDL_Keycode, int> keys[] = {
+            {SDLK_LEFT, 0x25}, {SDLK_UP, 0x26}, {SDLK_RIGHT, 0x27}, {SDLK_DOWN, 0x28},
+            {SDLK_HOME, 0x24}, {SDLK_END, 0x23}, {SDLK_PAGEUP, 0x21}, {SDLK_PAGEDOWN, 0x22},
+            {SDLK_INSERT, 0x2d}, {SDLK_DELETE, 0x2e},
+            {SDLK_F1, 0x70}, {SDLK_F12, 0x7b}, {SDLK_F13, 0x7c}, {SDLK_F24, 0x87},
+        };
+        for (const auto& [sdlKey, editorKey] : keys)
+            Require(Platform::TranslateSDLKey(sdlKey) == editorKey, "Navigation/function key translation failed");
+    }
+    void TestVideoSeeking(const char* path)
+    {
+        System::MountComfyData();
+        ApplicationHost host({});
+        auto movie = Render::MakeD3D11MediaFoundationMediaEngineMoviePlayer();
+        Require(movie->OpenFileAsync(path), "Cannot open the video seek fixture");
+        auto waitForFrame = [&]
+        {
+            const Uint32 deadline = SDL_GetTicks() + 10000;
+            while (movie->GetIsSeeking() && SDL_GetTicks() < deadline)
+                SDL_Delay(1);
+            Require(!movie->GetIsSeeking(), "Video seek did not finish");
+            const auto view = movie->GetCurrentTextureAsTexSprView();
+            Require(view.Tex != nullptr, "Decoded video frame is missing");
+            return view;
+        };
+        auto expectColor = [&](bool blue)
+        {
+            const auto view = waitForFrame();
+            const auto* pixel = view.Tex->MipMapsArray[0][0].Data.get();
+            Require(pixel[blue ? 2 : 0] > 200 && pixel[blue ? 0 : 2] < 30,
+                    "Video seek returned a frame from the wrong position");
+        };
+        expectColor(false);
+        const auto initialTexture = movie->GetCurrentTexture().Data.ResourceView;
+        const auto started = std::chrono::steady_clock::now();
+        for (int seek = 0; seek < 512; seek++)
+            Require(movie->SetPositionAsync(TimeSpan::FromSeconds(seek % 2 ? 1 : 5)), "Video seek was rejected");
+        movie->SetPositionAsync(TimeSpan::FromSeconds(4.5));
+        const double seekMilliseconds = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+        Require(seekMilliseconds < 500, "Rapid video seeks blocked the GUI thread");
+        expectColor(true);
+        Require(movie->GetCurrentTexture().Data.ResourceView == initialTexture,
+                "Video frame update replaced its GPU texture instead of reusing it");
+        movie->SetPositionAsync(TimeSpan::FromSeconds(0.5));
+        expectColor(false);
+        movie->SetPositionAsync(TimeSpan::FromSeconds(2.8));
+        expectColor(false);
+        movie->SetIsPlayingAsync(true);
+        const Uint32 playbackDeadline = SDL_GetTicks() + 450;
+        while (SDL_GetTicks() < playbackDeadline)
+        {
+            movie->GetCurrentTextureAsTexSprView();
+            SDL_Delay(10);
+        }
+        movie->SetIsPlayingAsync(false);
+        expectColor(true);
+        movie->SetPositionAsync(TimeSpan::FromSeconds(0));
+        expectColor(false);
+        movie->SetPositionAsync(TimeSpan::FromSeconds(4.5));
+        movie->SetIsPlayingAsync(true);
+        bool reachedRequestedFrame = false;
+        const Uint32 resumeDeadline = SDL_GetTicks() + 800;
+        while (SDL_GetTicks() < resumeDeadline)
+        {
+            const auto view = movie->GetCurrentTextureAsTexSprView();
+            if (view.Tex)
+            {
+                const auto* pixel = view.Tex->MipMapsArray[0][0].Data.get();
+                reachedRequestedFrame |= pixel[2] > 200 && pixel[0] < 30;
+            }
+            // Keep advancing requests while the worker decodes the long GOP.
+            SDL_Delay(1);
+        }
+        movie->SetIsPlayingAsync(false);
+        Require(reachedRequestedFrame, "Starting playback cancelled the pending cursor seek");
+        movie->SetPositionAsync(movie->GetDuration());
+        expectColor(true);
+        // Closing during a pending decode must join the worker safely.
+        movie->SetPositionAsync(TimeSpan::FromSeconds(1));
+        movie->CloseFileAsync();
+        Require(!movie->GetHasVideoStream() && !movie->GetIsSeeking(), "Video close left a decoder request active");
+        Require(movie->OpenFileAsync(path), "Cannot reopen the video after closing its worker");
+        expectColor(false);
+        std::cout << "Queued 512 video seeks in " << seekMilliseconds << " ms\n";
+    }
+    void TestAudioBuffering()
+    {
+        Require(SDL_InitSubSystem(SDL_INIT_AUDIO) == 0, "Audio initialization failed");
+        defer { SDL_QuitSubSystem(SDL_INIT_AUDIO); };
+        Audio::SDLBackend backend;
+        // Cover the old Windows default and an arbitrary, non-power-of-two size.
+        for (const u32 requestedFrames : {64u, 1500u})
+        {
+            std::atomic<u32> callbacks = 0;
+            std::atomic<bool> validFrames = true;
+            const u32 expectedFrames = requestedFrames == 64 ? 1024 : 2048;
+            Audio::StreamParameters parameters = {44100, 2, requestedFrames, Audio::StreamShareMode::Shared};
+            Require(backend.OpenStartStream(parameters, [&](i16* output, u32 frames, u32 channels)
+            {
+                if (frames != expectedFrames || channels != 2)
+                    validFrames = false;
+                std::fill(output, output + size_t(frames) * channels, 0);
+                callbacks++;
+            }), "Cannot open the audio buffering test stream");
+            const Uint32 deadline = SDL_GetTicks() + 2000;
+            while (callbacks.load() < 4 && SDL_GetTicks() < deadline)
+                SDL_Delay(10);
+            backend.StopCloseStream();
+            Require(callbacks.load() >= 4, "Audio callbacks did not advance");
+            Require(validFrames.load(), "SDL did not use the expected safe buffer size");
+            const auto stoppedCount = callbacks.load();
+            SDL_Delay(60);
+            Require(callbacks.load() == stoppedCount, "Audio callbacks continued after closing the device");
+        }
+    }
+    void TestChartPreview(Render::Renderer2D& renderer)
+    {
+        using namespace Studio::Editor;
+        TargetRenderHelper helper;
+        // Asset loading is asynchronous; keep servicing uploads on the GL thread.
+        const Uint32 deadline = SDL_GetTicks() + 1500;
+        while (SDL_GetTicks() < deadline)
+        {
+            helper.UpdateAsyncLoading(renderer);
+            SDL_Delay(10);
+        }
+        bool fontLoaded = false;
+        helper.WithFont36([&](const auto&) { fontLoaded = true; });
+        Require(fontLoaded, "Preview font did not finish loading");
+        helper.SetGameTheme(GameTheme::PS4FutureTone);
+        helper.SetAetSprGetter(renderer);
+        auto target = Render::Renderer2D::CreateRenderTarget();
+        target->Param.Resolution = {1920, 1080};
+        target->Param.ClearColor = {0.12f, 0.12f, 0.12f, 1};
+        Render::Camera2D camera;
+        camera.ProjectionSize = {1920, 1080};
+        renderer.Begin(camera, *target);
+        TargetRenderHelper::BackgroundData background = {};
+        background.DrawGrid = true;
+        background.DrawDim = true;
+        helper.DrawBackground(renderer, background);
+        TargetRenderHelper::HUDData hud = {};
+        hud.SongTitle = u8"譜面作成";
+        hud.Difficulty = Difficulty::Hard;
+        hud.Duration = TimeSpan::FromSeconds(120);
+        hud.DrawPracticeInfo = true;
+        helper.DrawHUD(renderer, hud);
+        renderer.End();
+        const auto pixels = target->TakeScreenshot();
+        // The life gauge is tinted green by the Aet composition. Sampling the
+        // wrong atlas rows instead produces the untinted gray gauge texture.
+        const size_t gaugePixel = (75 * 1920 + 400) * 4;
+        Require(pixels[gaugePixel + 1] > pixels[gaugePixel] + 10
+                && pixels[gaugePixel] > pixels[gaugePixel + 2] + 20,
+                "The game HUD sampled an incorrect sprite atlas region");
+        Require(Util::WriteImage("linux-chart-preview.png", target->Param.Resolution, pixels.get()),
+                "Cannot save the chart preview screenshot");
     }
     void TestEditorStartup()
     {
@@ -204,8 +454,12 @@ int main(int argc, const char* argv[])
 {
     try
     {
-        if (argc == 2 && std::string_view(argv[1]) == "--render")
+        if (argc == 3 && std::string_view(argv[1]) == "--video")
+            TestVideoSeeking(argv[2]);
+        else if (argc == 2 && std::string_view(argv[1]) == "--render")
             TestRendering();
+        else if (argc == 2 && std::string_view(argv[1]) == "--audio")
+            TestAudioBuffering();
         else if (argc == 2 && std::string_view(argv[1]) == "--assets")
             TestGameAssets();
         else if (argc == 2 && std::string_view(argv[1]) == "--editor")
@@ -217,6 +471,7 @@ int main(int argc, const char* argv[])
             Require(directory != nullptr, "Cannot create a test directory");
             defer { std::filesystem::remove_all(directory); };
             TestStorageAndFormats(directory);
+            TestNavigationKeys();
         }
         std::cout << "Linux tests passed\n";
         return EXIT_SUCCESS;

@@ -14,8 +14,12 @@ namespace Comfy::Platform
             return key - SDLK_a + 'A';
         if (key >= SDLK_0 && key <= SDLK_9)
             return key;
-        if (key >= SDLK_F1 && key <= SDLK_F24)
+        // SDL's F13-F24 codes are separated from F1-F12 by navigation
+        // keys. Treating that entire range as function keys swallowed arrows.
+        if (key >= SDLK_F1 && key <= SDLK_F12)
             return key - SDLK_F1 + 0x70;
+        if (key >= SDLK_F13 && key <= SDLK_F24)
+            return key - SDLK_F13 + 0x7c;
         switch (key)
         {
         case SDLK_TAB: return 0x09;

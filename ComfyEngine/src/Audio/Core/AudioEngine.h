@@ -130,7 +130,11 @@ namespace Comfy::Audio
 		static constexpr u32 OutputChannelCount = 2;
 		static constexpr u32 OutputSampleRate = 44100;
 
+#if defined(_WIN32)
 		static constexpr u32 DefaultBufferFrameCount = 64;
+#else
+		static constexpr u32 DefaultBufferFrameCount = 1024;
+#endif
 		static constexpr u32 MinBufferFrameCount = 8;
 		static constexpr u32 MaxBufferFrameCount = OutputSampleRate;
 

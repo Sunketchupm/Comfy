@@ -3,6 +3,9 @@
 #include "OpenGL.h"
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 extern "C"
 {
 #include <libavformat/avformat.h>
@@ -12,7 +15,7 @@ extern "C"
 
 namespace Comfy::Render
 {
-    // FFmpeg owns the demuxer/decoder. All texture uploads stay on the GUI thread.
+    // One worker owns FFmpeg decoding; the GUI consumes completed frames and uploads textures.
     class FFmpegMoviePlayer final : public IMoviePlayer
     {
     public:
@@ -43,8 +46,9 @@ namespace Comfy::Render
                 return false;
             }
             frame = av_frame_alloc();
+            decodedFrame = av_frame_alloc();
             packet = av_packet_alloc();
-            if (!frame || !packet)
+            if (!frame || !decodedFrame || !packet)
             {
                 CloseFileAsync();
                 return false;
@@ -53,11 +57,15 @@ namespace Comfy::Render
             duration = format->duration > 0 ? double(format->duration) / AV_TIME_BASE : 0;
             auto& mip = texture.MipMapsArray.emplace_back().emplace_back();
             mip.Size = resolution;
+            // FFmpeg frames are top-down, unlike the game sprite atlases.
+            texture.GPU_FlipY = true;
             mip.Format = Graphics::TextureFormat::RGBA8;
             mip.DataSize = size_t(resolution.x) * resolution.y * 4;
             mip.Data = std::make_unique<u8[]>(mip.DataSize);
             sprite.PixelRegion = sprite.TexelRegion = {0, 0, resolution.x, resolution.y};
-            DecodeTo(0);
+            frameRate = stream->avg_frame_rate;
+            decoderThread = std::thread([this] { DecodeRequests(); });
+            QueueFrame(0);
             Notify(MoviePlayerAsyncCallbackEvent::LoadedMetadata);
             Notify(MoviePlayerAsyncCallbackEvent::LoadedData);
             return true;
@@ -70,10 +78,27 @@ namespace Comfy::Render
         bool CloseFileAsync() override
         {
             playing = false;
+            {
+                const auto lock = std::scoped_lock(frameMutex);
+                stopping = true;
+            }
+            frameRequested.notify_one();
+            if (decoderThread.joinable())
+                decoderThread.join();
+            // Join before freeing FFmpeg objects or CPU/GPU frame storage.
+            {
+                const auto lock = std::scoped_lock(frameMutex);
+                pendingPixels.reset();
+                requestedSerial = completedSerial = requestedSeekGeneration = 0;
+                requestedTime = 0;
+                stopping = false;
+            }
+            hasFrame = false;
             if (scaler)
                 sws_freeContext(scaler);
             scaler = nullptr;
             av_frame_free(&frame);
+            av_frame_free(&decodedFrame);
             av_packet_free(&packet);
             avcodec_free_context(&decoder);
             if (format)
@@ -99,8 +124,16 @@ namespace Comfy::Render
             playing = value && decoder;
             return decoder != nullptr;
         }
-        bool GetIsSeeking() const override { return false; }
-        bool GetHasEnoughData() const override { return decoder != nullptr; }
+        bool GetIsSeeking() const override
+        {
+            const auto lock = std::scoped_lock(frameMutex);
+            return requestedSerial != completedSerial;
+        }
+        bool GetHasEnoughData() const override
+        {
+            const auto lock = std::scoped_lock(frameMutex);
+            return hasFrame || pendingPixels != nullptr;
+        }
         f32 GetPlaybackSpeed() const override { return speed; }
         bool SetPlaybackSpeedAsync(f32 value) override
         {
@@ -129,16 +162,12 @@ namespace Comfy::Render
                 return false;
             position = Clamp(value.TotalSeconds(), 0.0, duration);
             started = std::chrono::steady_clock::now();
-            const int64_t timestamp = int64_t(position / av_q2d(stream->time_base)) + StartTimestamp();
-            if (av_seek_frame(format, streamIndex, timestamp, AVSEEK_FLAG_BACKWARD) < 0)
-                return false;
-            avcodec_flush_buffers(decoder);
-            decodedTime = -1;
-            return DecodeTo(position);
+            QueueFrame(position, true);
+            return true;
         }
         bool FrameStepAsync(bool forward) override
         {
-            const double rate = av_q2d(stream->avg_frame_rate);
+            const double rate = av_q2d(frameRate);
             return SetPositionAsync(GetPosition() + TimeSpan::FromSeconds((forward ? 1 : -1) / (rate > 0 ? rate : 30)));
         }
         TimeSpan GetDuration() const override { return TimeSpan::FromSeconds(duration); }
@@ -157,19 +186,19 @@ namespace Comfy::Render
             output.PresentationDurationMFTime = u64(duration * 10000000);
             output.Video.FrameSizeWidth = resolution.x;
             output.Video.FrameSizeHeight = resolution.y;
-            output.Video.FrameRateNumerator = stream->avg_frame_rate.num;
-            output.Video.FrameRateDenominator = stream->avg_frame_rate.den;
+            output.Video.FrameRateNumerator = frameRate.num;
+            output.Video.FrameRateDenominator = frameRate.den;
             return true;
         }
         ComfyTextureID GetCurrentTexture() override
         {
             Update();
-            return decoder ? ComfyTextureID(texture) : ComfyTextureID();
+            return hasFrame ? ComfyTextureID(texture) : ComfyTextureID();
         }
         TexSprView GetCurrentTextureAsTexSprView() override
         {
             Update();
-            return decoder ? TexSprView{&texture, &sprite} : TexSprView{};
+            return hasFrame ? TexSprView{&texture, &sprite} : TexSprView{};
         }
     private:
         int64_t StartTimestamp() const { return stream->start_time == AV_NOPTS_VALUE ? 0 : stream->start_time; }
@@ -183,26 +212,112 @@ namespace Comfy::Render
                 callback(parameter);
             }
         }
+        double FrameDuration() const
+        {
+            const double rate = av_q2d(frameRate);
+            return rate > 0 ? 1.0 / rate : 1.0 / 30.0;
+        }
+        void QueueFrame(double target, bool explicitSeek = false)
+        {
+            {
+                const auto lock = std::scoped_lock(frameMutex);
+                // Paused redraws at the same position need no
+                // additional decoding. A pending request is replaced, not queued.
+                if (requestedSerial != 0 && std::abs(target - requestedTime) < 0.000001)
+                    return;
+                requestedTime = target;
+                // Playback time advances must not cancel an in-progress seek.
+                // Only an actual cursor seek invalidates the worker's result.
+                if (explicitSeek)
+                    requestedSeekGeneration++;
+                requestedSerial++;
+            }
+            frameRequested.notify_one();
+        }
+        bool RequestWasSuperseded(u64 seekGeneration) const
+        {
+            const auto lock = std::scoped_lock(frameMutex);
+            return stopping || requestedSeekGeneration != seekGeneration;
+        }
         void Update()
         {
             if (!decoder)
                 return;
-            const double target = GetPosition().TotalSeconds();
-            if (target + 0.1 < decodedTime)
-                SetPositionAsync(TimeSpan::FromSeconds(target));
-            else if (target > decodedTime)
-                DecodeTo(target);
+            if (playing)
+                QueueFrame(GetPosition().TotalSeconds());
+            // The worker never touches Tex, Spr, OpenGL, or application callbacks.
+            const auto lock = std::scoped_lock(frameMutex);
+            if (pendingPixels)
+            {
+                texture.MipMapsArray[0][0].Data.swap(pendingPixels);
+                pendingPixels.reset();
+                texture.GPU_Texture2D.RequestReupload = true;
+                hasFrame = true;
+            }
         }
-        bool DecodeTo(double target)
+        void DecodeRequests()
+        {
+            u64 servicedSerial = 0;
+            u64 servicedSeekGeneration = 0;
+            while (true)
+            {
+                double target;
+                bool explicitSeek;
+                u64 serial, seekGeneration;
+                {
+                    auto lock = std::unique_lock(frameMutex);
+                    frameRequested.wait(lock, [&] { return stopping || requestedSerial != servicedSerial; });
+                    if (stopping)
+                        return;
+                    target = requestedTime;
+                    seekGeneration = requestedSeekGeneration;
+                    explicitSeek = seekGeneration != servicedSeekGeneration;
+                    serial = requestedSerial;
+                }
+                // Nearby forward seeks can continue decoding. Rewind or jump
+                // directly to a preceding keyframe for larger discontinuities.
+                bool canDecode = true;
+                if (decodedTime < 0 || target < decodedTime - FrameDuration()
+                    || (explicitSeek && (target < decodedTime - 0.000001 || target > decodedTime + 0.5)))
+                {
+                    const int64_t timestamp = int64_t(target / av_q2d(stream->time_base)) + StartTimestamp();
+                    canDecode = av_seek_frame(format, streamIndex, timestamp, AVSEEK_FLAG_BACKWARD) >= 0;
+                    if (canDecode)
+                    {
+                        avcodec_flush_buffers(decoder);
+                        decodedTime = -1;
+                    }
+                }
+                auto pixels = canDecode ? DecodeTo(target, seekGeneration) : nullptr;
+                {
+                    const auto lock = std::scoped_lock(frameMutex);
+                    if (requestedSeekGeneration == seekGeneration && !stopping)
+                    {
+                        if (pixels)
+                            pendingPixels = std::move(pixels);
+                        completedSerial = serial;
+                    }
+                }
+                servicedSerial = serial;
+                servicedSeekGeneration = seekGeneration;
+            }
+        }
+        std::unique_ptr<u8[]> DecodeTo(double target, u64 seekGeneration)
         {
             while (decodedTime < target)
             {
-                int result = avcodec_receive_frame(decoder, frame);
+                if (RequestWasSuperseded(seekGeneration))
+                    return nullptr;
+                int result = avcodec_receive_frame(decoder, decodedFrame);
                 if (result == AVERROR(EAGAIN))
                 {
                     bool submitted = false;
-                    while (av_read_frame(format, packet) >= 0)
+                    while (true)
                     {
+                        if (RequestWasSuperseded(seekGeneration))
+                            return nullptr;
+                        if (av_read_frame(format, packet) < 0)
+                            break;
                         if (packet->stream_index == streamIndex)
                         {
                             result = avcodec_send_packet(decoder, packet);
@@ -214,31 +329,49 @@ namespace Comfy::Render
                     }
                     if (!submitted)
                         avcodec_send_packet(decoder, nullptr);
-                    result = avcodec_receive_frame(decoder, frame);
+                    result = avcodec_receive_frame(decoder, decodedFrame);
                 }
+                if (result == AVERROR(EAGAIN))
+                    continue;
                 if (result < 0)
-                    return decodedTime >= 0;
+                    break;
+                // Keep the last valid frame when receive_frame reaches EOF.
+                av_frame_unref(frame);
+                av_frame_move_ref(frame, decodedFrame);
                 decodedTime = frame->best_effort_timestamp == AV_NOPTS_VALUE
                     ? target : double(frame->best_effort_timestamp - StartTimestamp()) * av_q2d(stream->time_base);
-                scaler = sws_getCachedContext(scaler, frame->width, frame->height, AVPixelFormat(frame->format),
-                                              resolution.x, resolution.y, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
-                if (!scaler)
-                    return false;
-                auto& mip = texture.MipMapsArray[0][0];
-                uint8_t* destination[] = {mip.Data.get()};
-                int stride[] = {resolution.x * 4};
-                sws_scale(scaler, frame->data, frame->linesize, 0, frame->height, destination, stride);
-                texture.GPU_Texture2D.RequestReupload = true;
             }
-            return true;
+            if (decodedTime < 0 || RequestWasSuperseded(seekGeneration))
+                return nullptr;
+            // Convert only the frame we will display, not every intermediate
+            // frame decoded between a keyframe and the requested position.
+            scaler = sws_getCachedContext(scaler, frame->width, frame->height, AVPixelFormat(frame->format),
+                                          resolution.x, resolution.y, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+            if (!scaler)
+                return nullptr;
+            auto pixels = std::make_unique<u8[]>(size_t(resolution.x) * resolution.y * 4);
+            uint8_t* destination[] = {pixels.get()};
+            int stride[] = {resolution.x * 4};
+            if (sws_scale(scaler, frame->data, frame->linesize, 0, frame->height, destination, stride) <= 0)
+                return nullptr;
+            return pixels;
         }
         AVFormatContext* format = nullptr;
         AVCodecContext* decoder = nullptr;
         AVStream* stream = nullptr;
         AVFrame* frame = nullptr;
+        AVFrame* decodedFrame = nullptr;
         AVPacket* packet = nullptr;
         SwsContext* scaler = nullptr;
         int streamIndex = -1;
+        AVRational frameRate = {};
+        std::thread decoderThread;
+        mutable std::mutex frameMutex;
+        std::condition_variable frameRequested;
+        std::unique_ptr<u8[]> pendingPixels;
+        double requestedTime = 0;
+        u64 requestedSerial = 0, completedSerial = 0, requestedSeekGeneration = 0;
+        bool stopping = false, hasFrame = false;
         Graphics::Tex texture;
         Graphics::Spr sprite = {};
         MoviePlayerAsyncCallbackFunc callback;
