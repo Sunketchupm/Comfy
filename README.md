@@ -29,6 +29,20 @@ Letting it sit here to just rot away also feels kinda shitty for anybody who mig
 
 A lot of the code was me playing around, just having fun with different ideas and I guess also some kind of chart editor..? for some fucked up weeb game with dancing dolls 'n shit?? I dunno man, feels like a fever dream tbh.
 
+## Building with Visual Studio 2026
+
+On Windows, install the latest stable Visual Studio 2026 with the **Desktop development with C++** workload, the latest **MSVC v145 C++ x64/x86 build tools**, and a Windows SDK.
+
+Open `Comfy.sln`, select `Debug` or `Release` with the `x64` platform, and build the solution. Alternatively, run this from a Visual Studio Developer Command Prompt in the source directory:
+
+```bat
+msbuild Comfy.sln /m /p:Configuration=Release /p:Platform=x64
+```
+
+All projects, including the bundled dependencies, use the v145 toolset. The Windows SDK version is set to `10.0`, which selects the latest installed SDK instead of requiring the old 10.0.17763.0 SDK. MSBuild uses the current installed version, and the solution requires Visual Studio 2026 or newer.
+
+The existing build scripts call the Release versions of `ComfyVersion.exe` and `ComfyDataBuild.exe`, so build Release first before building Debug. The version generator uses Git during a normal Windows build. Runtime game files are still required as described below.
+
 ## The Tower of Babel
 Schizo rambling over with, the overall project structure I *think* was about the following:
 
