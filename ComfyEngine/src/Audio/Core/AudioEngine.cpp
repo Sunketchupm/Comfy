@@ -565,7 +565,6 @@ namespace Comfy::Audio
 		StreamParameters streamParam = {};
 		streamParam.SampleRate = OutputSampleRate;
 		streamParam.ChannelCount = OutputChannelCount;
-		streamParam.DesiredFrameCount = impl->CurrentBufferFrameSize;
 		streamParam.Mode = (impl->CurrentBackendType == AudioBackend::WASAPIExclusive) ? StreamShareMode::Exclusive : StreamShareMode::Shared;
 
 		if (impl->CurrentBackend == nullptr)

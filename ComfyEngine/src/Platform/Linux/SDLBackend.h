@@ -24,10 +24,7 @@ namespace Comfy::Audio
             // too frequently. Keep enough headroom for desktop scheduling jitter.
             // SDL expects a power of two; 32768 also fits its Uint16 sample count
             // and the engine's 44100-frame mixing buffer.
-            const u32 desiredFrames = std::clamp(parameters.DesiredFrameCount, 1024u, 32768u);
-            u32 bufferFrames = 1024;
-            while (bufferFrames < desiredFrames)
-                bufferFrames *= 2;
+            u32 bufferFrames = 128u;
             requested.samples = static_cast<Uint16>(bufferFrames);
             requested.userdata = this;
             requested.callback = [](void* user, Uint8* buffer, int bytes)

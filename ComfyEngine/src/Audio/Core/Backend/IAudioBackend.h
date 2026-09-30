@@ -14,7 +14,6 @@ namespace Comfy::Audio
 	{
 		u32 SampleRate;
 		u32 ChannelCount;
-		u32 DesiredFrameCount;
 		StreamShareMode Mode;
 	};
 
