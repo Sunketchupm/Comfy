@@ -36,12 +36,12 @@ A lot of the code was me playing around, just having fun with different ideas an
 
 ## Building the native Linux chart editor
 
-The Linux build produces a native 64-bit `ComfyStudio` executable.
+The Linux build produces a native 64-bit `ComfyStudio` executable that uses SDL's native Wayland backend by default. Run it from a Wayland desktop session; it does not automatically fall back to XWayland. An explicit `SDL_VIDEODRIVER` override is honored, including `offscreen` for automated checks and `x11` for compatibility.
 
 The following dependencies are needed:
 
 ```sh
-clang python ninja pkgconf sdl2-compat glew mesa openssl zlib libvorbis ffmpeg zenity
+clang python ninja pkgconf sdl2-compat wayland libxkbcommon libdecor glew mesa openssl zlib libvorbis ffmpeg zenity
 ```
 
 From the source directory, build and run:
@@ -68,6 +68,14 @@ Run the Linux checks with:
 ```sh
 python tools/build-linux.py --test
 ```
+
+To also verify native Wayland startup, rendering, and shutdown against your running compositor:
+
+```sh
+python tools/build-linux.py --test-wayland
+```
+
+This briefly opens the editor and asserts that SDL selected `wayland`. It uses dummy audio and saves `linux-editor-smoke.png`. Combine it with `--test` to run both suites. SDL must have Wayland support and the compositor must provide desktop OpenGL through EGL. Wayland controls window placement, so saved absolute window positions cannot be restored; window size, maximization, and fullscreen requests still use SDL.
 
 These checks exercise Unicode file I/O, archive AES decryption, DDS texture decoding, chart save/load roundtrips, OpenGL rendering, and normal editor startup and shutdown. When `dev_rom/` is present in the build directory, they also decode and upload the supplied game textures, load the font map, decode the sound banks, and open an SDL audio stream. A rendered HUD/font preview is saved as `linux-chart-preview.png`. When the `ffmpeg` command is installed, a generated 1080p video fixture also checks rapid seeking, playback immediately after a cursor seek, end-of-file handling, reopening, and GPU texture reuse. Audio checks verify callback buffer sizes and device shutdown; navigation-key checks cover arrows, Home/End, Page Up/Down, and both function-key ranges. The startup test saves `linux-editor-smoke.png` in the build directory. Rendering and startup tests use SDL's offscreen video driver and dummy audio driver. They require an OpenGL-capable offscreen driver, such as Mesa, and do not verify physical audio devices or controllers.
 

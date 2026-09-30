@@ -29,6 +29,7 @@ using namespace Comfy;
 namespace
 {
     bool CaptureEditor = false;
+    bool RequireWayland = false;
     Uint32 CaptureAfter = 0;
 }
 
@@ -37,6 +38,12 @@ extern "C" void SDLCALL SDL_GL_SwapWindow(SDL_Window* window)
 {
     if (CaptureEditor && SDL_GetTicks() >= CaptureAfter)
     {
+        if (RequireWayland)
+        {
+            const char* driver = SDL_GetCurrentVideoDriver();
+            if (driver == nullptr || std::string_view(driver) != "wayland")
+                throw std::runtime_error("Editor did not select the native Wayland video driver");
+        }
         ivec2 size;
         SDL_GL_GetDrawableSize(window, &size.x, &size.y);
         std::vector<u8> pixels(size_t(size.x) * size.y * 4);
@@ -429,11 +436,12 @@ namespace
         Require(Util::WriteImage("linux-chart-preview.png", target->Param.Resolution, pixels.get()),
                 "Cannot save the chart preview screenshot");
     }
-    void TestEditorStartup()
+    void TestEditorStartup(bool requireWayland = false)
     {
         Require(SDL_Init(SDL_INIT_TIMER) == 0, "Timer initialization failed");
         // Quit through the normal event path so destruction/settings saves are tested.
         CaptureEditor = true;
+        RequireWayland = requireWayland;
         CaptureAfter = SDL_GetTicks() + 1000;
         const auto timer = SDL_AddTimer(2000, [](Uint32, void*) -> Uint32
         {
@@ -464,6 +472,8 @@ int main(int argc, const char* argv[])
             TestGameAssets();
         else if (argc == 2 && std::string_view(argv[1]) == "--editor")
             TestEditorStartup();
+        else if (argc == 2 && std::string_view(argv[1]) == "--wayland")
+            TestEditorStartup(true);
         else
         {
             char directoryTemplate[] = "/tmp/comfy-linux-tests-XXXXXX";

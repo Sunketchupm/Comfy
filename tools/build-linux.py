@@ -122,6 +122,8 @@ def main():
     parser.add_argument('--build-dir', type=Path, default=ROOT / 'build/linux')
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--test', action='store_true', help='Run format, rendering, and editor startup tests')
+    parser.add_argument('--test-wayland', action='store_true',
+                        help='Run native Wayland editor startup against the current compositor')
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--target', choices=['ComfyStudio', 'ComfyDataBuild', 'libComfyLib.a'])
     arguments = parser.parse_args()
@@ -135,12 +137,12 @@ def main():
     build_directory = arguments.build_dir.resolve()
     configure(build_directory, arguments.debug)
     command = ['ninja', '-C', str(build_directory), '-j', str(arguments.jobs)]
-    if arguments.test:
+    if arguments.test or arguments.test_wayland:
         command += ['ComfyStudio', 'ComfyDataBuild', 'LinuxTests']
     elif arguments.target:
         command.append(arguments.target)
     subprocess.run(command, check=True)
-    if arguments.test or not arguments.target or arguments.target == 'ComfyStudio':
+    if arguments.test or arguments.test_wayland or not arguments.target or arguments.target == 'ComfyStudio':
         shutil.copytree(ROOT / 'ComfyStudio/manual', build_directory / 'manual', dirs_exist_ok=True)
     if arguments.test:
         environment = dict(os.environ, SDL_VIDEODRIVER='offscreen', SDL_AUDIODRIVER='dummy')
@@ -159,6 +161,13 @@ def main():
         for test_arguments in tests:
             subprocess.run([str(build_directory / 'LinuxTests'), *test_arguments], cwd=build_directory,
                            env=environment, check=True, timeout=30)
+    if arguments.test_wayland:
+        environment = dict(os.environ, SDL_AUDIODRIVER='dummy')
+        # Exercise the application's default selection, without SDL choosing X11
+        # through an inherited user override.
+        environment.pop('SDL_VIDEODRIVER', None)
+        subprocess.run([str(build_directory / 'LinuxTests'), '--wayland'], cwd=build_directory,
+                       env=environment, check=True, timeout=30)
 
 
 if __name__ == '__main__':

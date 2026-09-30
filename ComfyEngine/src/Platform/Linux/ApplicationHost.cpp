@@ -73,8 +73,13 @@ namespace Comfy
     };
     ApplicationHost::ApplicationHost(const ConstructionParam& parameters) : impl(std::make_unique<Impl>(*this))
     {
+        // Use native Wayland unless the caller explicitly selects another driver
+        // (for example, the offscreen driver used by automated rendering tests).
+        // Do not silently fall back to XWayland when Wayland initialization fails.
+        if (!SDL_getenv("SDL_VIDEODRIVER"))
+            SDL_setenv("SDL_VIDEODRIVER", "wayland", 0);
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0)
-            throw std::runtime_error(SDL_GetError());
+            throw std::runtime_error(std::string("Could not initialize SDL video/audio: ") + SDL_GetError());
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
@@ -92,7 +97,7 @@ namespace Comfy
             throw std::runtime_error(SDL_GetError());
         glewExperimental = GL_TRUE;
         const GLenum glewStatus = glewInit();
-        // GLEW may report that GLX is unavailable for SDL's EGL/offscreen context
+        // GLEW may report that GLX is unavailable for SDL's EGL/Wayland or offscreen context
         // after successfully loading the OpenGL entry points.
         if (glewStatus != GLEW_OK && (!glGenFramebuffers || !glBindFramebuffer))
             throw std::runtime_error(reinterpret_cast<const char*>(glewGetErrorString(glewStatus)));
