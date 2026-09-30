@@ -210,7 +210,7 @@
       <StringPooling>true</StringPooling>
       <SDLCheck>true</SDLCheck>
       <ExceptionHandling>false</ExceptionHandling>
-      <AdditionalOptions>-D_HAS_EXCEPTIONS=0 -D_STATIC_CPPLIB %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 -D_HAS_EXCEPTIONS=0 -D_STATIC_CPPLIB %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4201;4458;4100</DisableSpecificWarnings>
     </ClCompile>
     <Link>
@@ -243,7 +243,7 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <ExceptionHandling>false</ExceptionHandling>
-      <AdditionalOptions>-D_HAS_EXCEPTIONS=0 -D_STATIC_CPPLIB %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 -D_HAS_EXCEPTIONS=0 -D_STATIC_CPPLIB %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4201;4458;4100</DisableSpecificWarnings>
     </ClCompile>
     <Link>

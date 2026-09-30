@@ -34,21 +34,21 @@ namespace Comfy::Audio
 			error = ::CoCreateInstance(__uuidof(::MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(::IMMDeviceEnumerator), &deviceEnumerator);
 			if (FAILED(error))
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to create MMDeviceEnumerator. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to create MMDeviceEnumerator. Error: 0x%X", error);
 				return false;
 			}
 
 			error = deviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
 			if (FAILED(error))
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to retrieve default audio endpoint. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to retrieve default audio endpoint. Error: 0x%X", error);
 				return false;
 			}
 
 			error = device->Activate(__uuidof(::IAudioClient), CLSCTX_ALL, nullptr, &audioClient);
 			if (FAILED(error))
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to activate audio client for device. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to activate audio client for device. Error: 0x%X", error);
 				return false;
 			}
 
@@ -76,7 +76,7 @@ namespace Comfy::Audio
 
 			if (FAILED(error))
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to retrieve device period. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to retrieve device period. Error: 0x%X", error);
 				return false;
 			}
 
@@ -87,7 +87,7 @@ namespace Comfy::Audio
 				error = audioClient->GetBufferSize(&bufferFrameCount);
 				if (FAILED(error))
 				{
-					Logger::LogErrorLine(__FUNCTION__"(): Unable to get audio client buffer size. Error: 0x%X", error);
+					Logger::LogErrorLine("(): Unable to get audio client buffer size. Error: 0x%X", error);
 					return false;
 				}
 
@@ -97,47 +97,47 @@ namespace Comfy::Audio
 				error = device->Activate(__uuidof(::IAudioClient), CLSCTX_ALL, nullptr, &audioClient);
 				if (FAILED(error))
 				{
-					Logger::LogErrorLine(__FUNCTION__"(): Unable to activate audio client for device. Error: 0x%X", error);
+					Logger::LogErrorLine("(): Unable to activate audio client for device. Error: 0x%X", error);
 					return false;
 				}
 
 				error = audioClient->Initialize(shareMode, streamFlags, bufferTimeDuration, deviceTimePeriod, &waveformat, nullptr);
 				if (FAILED(error))
 				{
-					Logger::LogErrorLine(__FUNCTION__"(): Unable to initialize audio client. Error: 0x%X", error);
+					Logger::LogErrorLine("(): Unable to initialize audio client. Error: 0x%X", error);
 					return false;
 				}
 			}
 			else if (FAILED(error))
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to initialize audio client. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to initialize audio client. Error: 0x%X", error);
 				return false;
 			}
 
 			audioClientEvent = ::CreateEventW(nullptr, false, false, nullptr);
 			if (audioClientEvent == NULL)
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to create audio client event. Error: 0x%X", ::GetLastError());
+				Logger::LogErrorLine("(): Unable to create audio client event. Error: 0x%X", ::GetLastError());
 				return false;
 			}
 
 			error = audioClient->SetEventHandle(audioClientEvent);
 			if (FAILED(error))
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to set audio client event handle. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to set audio client event handle. Error: 0x%X", error);
 				return false;
 			}
 
 			error = audioClient->GetService(__uuidof(::IAudioRenderClient), &renderClient);
 			if (FAILED(error))
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to get audio render client. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to get audio render client. Error: 0x%X", error);
 				return false;
 			}
 
 			error = audioClient->GetService(__uuidof(::ISimpleAudioVolume), &simpleAudioVolume);
 			if (FAILED(error))
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to get simple audio volume interface. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to get simple audio volume interface. Error: 0x%X", error);
 
 			renderThread = ::CreateThread(nullptr, 0, [](LPVOID lpParameter) -> DWORD
 			{
@@ -146,7 +146,7 @@ namespace Comfy::Audio
 
 			if (renderThread == NULL)
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to create render thread. Error: 0x%X", ::GetLastError());
+				Logger::LogErrorLine("(): Unable to create render thread. Error: 0x%X", ::GetLastError());
 				return false;
 			}
 
@@ -195,7 +195,7 @@ namespace Comfy::Audio
 		{
 			if (audioClient == nullptr || renderClient == nullptr)
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Audio client uninitialized");
+				Logger::LogErrorLine("(): Audio client uninitialized");
 				return -1;
 			}
 
@@ -206,7 +206,7 @@ namespace Comfy::Audio
 			error = audioClient->GetBufferSize(&bufferFrameCount);
 			if (FAILED(error))
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to get audio client buffer size. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to get audio client buffer size. Error: 0x%X", error);
 				return -1;
 			}
 
@@ -224,12 +224,12 @@ namespace Comfy::Audio
 			proAudioTaskIndex = 0;
 			proAudioTask = ::AvSetMmThreadCharacteristicsW(L"Pro Audio", &proAudioTaskIndex);
 			if (proAudioTask == NULL)
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to assign Pro Audio thread characteristics to render thread. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to assign Pro Audio thread characteristics to render thread. Error: 0x%X", error);
 
 			error = audioClient->Start();
 			if (FAILED(error))
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to start audio client. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to start audio client. Error: 0x%X", error);
 				return -1;
 			}
 
@@ -241,7 +241,7 @@ namespace Comfy::Audio
 				const auto waitObjectResult = ::WaitForSingleObject(audioClientEvent, 2000);
 				if (waitObjectResult != WAIT_OBJECT_0)
 				{
-					Logger::LogErrorLine(__FUNCTION__"(): Audio client event timeout. Error: 0x%X", ERROR_TIMEOUT);
+					Logger::LogErrorLine("(): Audio client event timeout. Error: 0x%X", ERROR_TIMEOUT);
 					break;
 				}
 
@@ -268,7 +268,7 @@ namespace Comfy::Audio
 
 			error = audioClient->Stop();
 			if (FAILED(error))
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to stop audio client. Error: 0x%X", error);
+				Logger::LogErrorLine("(): Unable to stop audio client. Error: 0x%X", error);
 
 			if (proAudioTask != NULL)
 				::AvRevertMmThreadCharacteristics(proAudioTask);

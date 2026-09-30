@@ -1,4 +1,4 @@
-﻿#include "ChartEditor.h"
+#include "ChartEditor.h"
 #include "ChartCommands.h"
 #include "FileFormat/PJEFile.h"
 #include "IO/Path.h"
@@ -12,6 +12,7 @@
 #include "Misc/StringUtil.h"
 #include "Time/TimeUtilities.h"
 #include <FontIcons.h>
+#include <filesystem>
 
 namespace Comfy::Studio::Editor
 {
@@ -48,6 +49,7 @@ namespace Comfy::Studio::Editor
 		}
 
 		// HACK: Gotta resort to raw Win32 calls to have access to the file creation dates. Might wanna refactor and abstract away this in the future 
+#ifdef _WIN32
 		bool Win32DeleteAllOldAutoSaveFilesInDirectoryOverMaxLimit(std::string_view directoryToClear, i32 maxAutoSaveFiles)
 		{
 			assert(maxAutoSaveFiles > 0 && !directoryToClear.empty());
@@ -105,6 +107,50 @@ namespace Comfy::Studio::Editor
 
 			return true;
 		};
+#else
+		bool Win32DeleteAllOldAutoSaveFilesInDirectoryOverMaxLimit(std::string_view directoryToClear, i32 maxAutoSaveFiles)
+		{
+            if (maxAutoSaveFiles <= 0 || directoryToClear.empty())
+                return false;
+            struct AutoSaveEntry
+            {
+                std::filesystem::path Path;
+                std::filesystem::file_time_type Modified;
+            };
+            std::vector<AutoSaveEntry> files;
+            std::error_code error;
+            const auto directory = std::filesystem::directory_iterator(std::filesystem::u8path(directoryToClear), error);
+            if (error)
+                return false;
+            for (const auto& entry : directory)
+            {
+                const auto name = entry.path().filename().u8string();
+                if (!entry.is_regular_file(error) || error)
+                    continue;
+                if (Util::StartsWithInsensitive(name, ComfyAutoSaveFilePrefix)
+                    && Util::EndsWithInsensitive(name, ComfyAutoSaveFileExtension))
+                {
+                    const auto modified = entry.last_write_time(error);
+                    if (!error)
+                        files.push_back({entry.path(), modified});
+                }
+            }
+            std::sort(files.begin(), files.end(), [](const auto& left, const auto& right)
+            {
+                return left.Modified < right.Modified;
+            });
+            // Reserve one slot for the autosave that is about to be written.
+            const size_t retained = size_t(maxAutoSaveFiles - 1);
+            for (size_t index = 0; index + retained < files.size(); index++)
+            {
+                std::filesystem::remove(files[index].Path, error);
+                if (error)
+                    return false;
+            }
+            return true;
+    };
+#endif
+
 	}
 
 	ChartEditor::ChartEditor(ComfyStudioApplication& parent, EditorManager& editor) : IEditorComponent(parent, editor)
@@ -912,7 +958,7 @@ namespace Comfy::Studio::Editor
 
 	bool ChartEditor::IsSongAsyncLoading() const
 	{
-		return (songSourceFuture.valid() && !songSourceFuture._Is_ready());
+		return (songSourceFuture.valid() && !(songSourceFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready));
 	}
 
 	bool ChartEditor::IsMovieAsyncLoading() const
@@ -1137,7 +1183,7 @@ namespace Comfy::Studio::Editor
 
 	void ChartEditor::UpdateAsyncSongSourceLoading()
 	{
-		if (!songSourceFuture.valid() || !songSourceFuture._Is_ready())
+		if (!songSourceFuture.valid() || !(songSourceFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready))
 			return;
 
 		const auto oldPlaybackTime = GetPlaybackTimeAsync();

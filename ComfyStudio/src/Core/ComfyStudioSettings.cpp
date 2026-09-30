@@ -219,7 +219,7 @@ namespace Comfy::Studio
 		const auto fileVersion = TryGetJsonSettingsFileVersionFromRoot(rootJson).value_or(SemanticVersion {});
 		if (fileVersion.Major > CurrentVersion.Major)
 		{
-			Logger::LogErrorLine(__FUNCTION__"(): Unsupported AppSettings version detected: \"%s\". Current version: \"%s\"", fileVersion.ToString().c_str(), CurrentVersion.ToString().c_str());
+			Logger::LogErrorLine("(): Unsupported AppSettings version detected: \"%s\". Current version: \"%s\"", fileVersion.ToString().c_str(), CurrentVersion.ToString().c_str());
 			return false;
 		}
 
@@ -968,7 +968,7 @@ namespace Comfy::Studio
 		const auto fileVersion = TryGetJsonSettingsFileVersionFromRoot(rootJson).value_or(SemanticVersion {});
 		if (fileVersion.Major > CurrentVersion.Major)
 		{
-			Logger::LogErrorLine(__FUNCTION__"(): Unsupported UserSettings version detected: \"%s\". Current version: \"%s\"", fileVersion.ToString().c_str(), CurrentVersion.ToString().c_str());
+			Logger::LogErrorLine("(): Unsupported UserSettings version detected: \"%s\". Current version: \"%s\"", fileVersion.ToString().c_str(), CurrentVersion.ToString().c_str());
 			return false;
 		}
 

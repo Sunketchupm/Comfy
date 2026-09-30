@@ -24,13 +24,13 @@ namespace Comfy::IO
 		auto farc = std::make_unique<FArc>();
 		if (!farc->OpenStream(filePath))
 		{
-			Logger::LogErrorLine(__FUNCTION__"(): Unable to open '%s'", filePath.data());
+			Logger::LogErrorLine("(): Unable to open '%s'", filePath.data());
 			return nullptr;
 		}
 
 		if (!farc->ParseHeaderAndEntries())
 		{
-			Logger::LogErrorLine(__FUNCTION__"(): Unable to parse '%s'", filePath.data());
+			Logger::LogErrorLine("(): Unable to parse '%s'", filePath.data());
 			return nullptr;
 		}
 

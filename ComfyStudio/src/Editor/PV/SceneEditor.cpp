@@ -1625,7 +1625,7 @@ namespace Comfy::Studio::Editor
 
 	void SceneEditor::TakeScreenshotGui(ViewportContext& activeViewport)
 	{
-		const bool isScreenshotSaving = lastScreenshotTaskFuture.valid() && !lastScreenshotTaskFuture._Is_ready();
+		const bool isScreenshotSaving = lastScreenshotTaskFuture.valid() && !(lastScreenshotTaskFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
 		const vec4 loadingColor = vec4(0.83f, 0.75f, 0.42f, 1.00f);
 
 		if (isScreenshotSaving)

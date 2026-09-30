@@ -52,7 +52,7 @@ namespace Comfy::Studio::Editor
 
 	constexpr DecomposedTimeSignature DecomposeTimeSignature(TimeSignature signature)
 	{
-		DecomposedTimeSignature result;
+		DecomposedTimeSignature result = {};
 		result.TicksPerBeat = BeatTick::FromBars(1) / signature.Denominator;
 		result.BeatsPerBar = signature.Numerator;
 		return result;

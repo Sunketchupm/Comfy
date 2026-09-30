@@ -35,18 +35,16 @@ namespace Comfy::Studio::Editor
 
 		static_assert(sizeof(HeaderData) == 64);
 
-#ifndef _WIN32
-		static_assert(false);
-#endif /* _WIN32 */
-
-#ifndef _WIN64
-		static_assert(false);
-#endif /* _WIN64 */
+        static_assert(sizeof(void*) == 8, "Chart files require a 64-bit build");
 
 		constexpr std::array<std::string_view, 10> CreatorInfoStrings =
 		{
 			"Comfy Studio",
-			"win32",
+#ifdef _WIN32
+            "win32",
+#else
+            "linux",
+#endif
 			"x64",
 			BuildVersion::Author,
 			BuildVersion::CommitHash,

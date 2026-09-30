@@ -1,5 +1,7 @@
 #include "Theme.h"
+#ifdef _WIN32
 #include "Core/Win32LeanWindowsHeader.h"
+#endif
 
 namespace ImGui
 {
@@ -21,9 +23,12 @@ namespace ImGui
 		style->GrabMinSize = 12.0f;
 
 		// NOTE: To prevent render glitches for free floating windows
-		if (const auto minWindowWidth = ::GetSystemMetrics(SM_CXMIN); minWindowWidth != 0)
+		#ifdef _WIN32
+        if (const auto minWindowWidth = ::GetSystemMetrics(SM_CXMIN); minWindowWidth != 0)
 			style->WindowMinSize = ImVec2(static_cast<f32>(minWindowWidth), 32.0f);
-		else // NOTE: Otherwise a reasonable limit would be
+        else
+#endif
+        // A reasonable minimum also works for Linux desktop windows.
 			style->WindowMinSize = ImVec2(120.0f, 32.0f);
 
 		ImVec4* colors = style->Colors;

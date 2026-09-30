@@ -1,7 +1,15 @@
 #pragma once
 #include "Types.h"
 #include "Time/TimeSpan.h"
+#ifdef _WIN32
 #include "Core/Win32LeanWindowsHeader.h"
+#else
+using HWND = void*;
+using HICON = void*;
+using UINT = unsigned int;
+using WPARAM = uintptr_t;
+using LPARAM = intptr_t;
+#endif
 #include <functional>
 #include <optional>
 

@@ -1,6 +1,8 @@
 #pragma once
 #include "Types.h"
+#ifdef _MSC_VER
 #include <intrin.h>
+#endif
 
 namespace Comfy::Util
 {

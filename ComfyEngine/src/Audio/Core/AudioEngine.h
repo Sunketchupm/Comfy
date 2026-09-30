@@ -98,14 +98,24 @@ namespace Comfy::Audio
 	{
 		WASAPIShared,
 		WASAPIExclusive,
-		Count,
-		Default = WASAPIExclusive, // WASAPIShared,
+#ifndef _WIN32
+        SDL,
+#endif
+        Count,
+#ifdef _WIN32
+        Default = WASAPIExclusive,
+#else
+        Default = SDL,
+#endif
 	};
 
 	constexpr std::array<const char*, EnumCount<AudioBackend>()> AudioBackendNames =
 	{
 		"WASAPI (Shared)",
-		"WASAPI (Exclusive)",
+        "WASAPI (Exclusive)",
+#ifndef _WIN32
+        "SDL",
+#endif
 	};
 
 	class AudioEngine : NonCopyable

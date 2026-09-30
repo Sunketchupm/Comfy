@@ -761,7 +761,11 @@ namespace Comfy::Studio::Editor
 			auto& audioEngine = Audio::AudioEngine().GetInstance();
 			const bool wasStreamRunnig = audioEngine.GetIsStreamOpenRunning();
 
-			audioEngine.SetAudioBackend(GlobalUserData.System.Audio.RequestExclusiveDeviceAccess ? Audio::AudioBackend::WASAPIExclusive : Audio::AudioBackend::WASAPIShared);
+			#ifdef _WIN32
+            audioEngine.SetAudioBackend(GlobalUserData.System.Audio.RequestExclusiveDeviceAccess ? Audio::AudioBackend::WASAPIExclusive : Audio::AudioBackend::WASAPIShared);
+#else
+            audioEngine.SetAudioBackend(Audio::AudioBackend::SDL);
+#endif
 
 			if (wasStreamRunnig)
 				audioEngine.EnsureStreamRunning();
@@ -1504,7 +1508,9 @@ namespace Comfy::Studio::Editor
 			GuiSettingsRighSideHelpMarker("Automatically closes the audio session if the program window loses focus and no sounds are currently playing.\n"
 				"This option is enabled by default to not needlessly keep exclusive device access when it's not needed");
 
-			pendingChanges |= GuiSettingsCheckbox("Request Exclusive Device Access", userData.System.Audio.RequestExclusiveDeviceAccess);
+			#ifdef _WIN32
+            pendingChanges |= GuiSettingsCheckbox("Request Exclusive Device Access", userData.System.Audio.RequestExclusiveDeviceAccess);
+#endif
 			GuiSettingsRighSideHelpMarker("Requests exclusive device access which (if supported by the hardware) can greatly reduce audio latency at the cost of only a single program being able to input/output sound on the current system.\n"
 				"If exclusve access is denied (for example when manually disabled in the windows speaker sound settings) then shared mode will automatically be used as a fallback.\n\n"
 				"Disable this option if you're experiencing audio issues, need to have multiple programs playing sound at once or want to record the audio of this program using conventional video/audio capture software. "

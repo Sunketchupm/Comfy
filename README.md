@@ -29,6 +29,45 @@ Letting it sit here to just rot away also feels kinda shitty for anybody who mig
 
 A lot of the code was me playing around, just having fun with different ideas and I guess also some kind of chart editor..? for some fucked up weeb game with dancing dolls 'n shit?? I dunno man, feels like a fever dream tbh.
 
+## Building the native Linux chart editor
+
+The Linux build produces a native 64-bit `ComfyStudio` executable. It uses the existing chart editor with SDL2 for windows, keyboard/mouse/controller input and audio, OpenGL for GUI and 2D rendering, FFmpeg for video previews, and OpenSSL for archive decryption. The Windows solution continues to use its existing backends.
+
+On Arch Linux, install the build and runtime dependencies:
+
+```sh
+sudo pacman -S --needed clang python ninja pkgconf sdl2-compat glew mesa openssl zlib libvorbis ffmpeg zenity
+```
+
+From the source directory, build and run:
+
+```sh
+python tools/build-linux.py
+./build/linux/ComfyStudio
+```
+
+The Python builder generates a Ninja build with compiler dependency tracking. It builds the shared file-format library, editor, and native `ComfyDataBuild` resource packer, packs `ComfyData.dat`, and copies the user manual beside the executable. Paths containing spaces are supported. No Git commands, Windows SDK, Wine, or downloaded build-time dependencies are used by the Linux builder. Build metadata uses the repository's fallback version information.
+
+Place the extracted game assets in `build/linux/dev_rom/`, retaining the original `2d/`, `sound/`, and other subdirectories. These assets are still required for game graphics, fonts, and sound effects. Keep `ComfyData.dat`, `manual/`, and `dev_rom/` beside the executable when moving the build. Settings are stored in that directory, which must be writable. Linux filenames are case-sensitive.
+
+For a separate debug build:
+
+```sh
+python tools/build-linux.py --debug --build-dir build/linux-debug
+```
+
+Use `--jobs 4` to change build parallelism. `--target ComfyDataBuild` and `--target libComfyLib.a` build those targets individually. The default compiler is Clang; `CXX` can select another compiler, though Clang is the tested compiler.
+
+Run the Linux checks with:
+
+```sh
+python tools/build-linux.py --test
+```
+
+These checks exercise Unicode file I/O, archive AES decryption, DDS texture decoding, chart save/load roundtrips, OpenGL rendering, and normal editor startup and shutdown. When `dev_rom/` is present in the build directory, they also decode and upload the supplied game textures, load the font map, decode the sound banks, and open an SDL audio stream. The startup test saves `linux-editor-smoke.png` in the build directory. Rendering and startup tests use SDL's offscreen video driver and dummy audio driver. They require an OpenGL-capable offscreen driver, such as Mesa, and do not verify physical audio devices or controllers.
+
+The initial Linux port focuses on the chart editor. The unfinished Aet and 3D/PV editors are excluded. Docking works inside the main window; detached OS-level ImGui windows are not implemented. SDL provides shared audio device access; WASAPI exclusive mode is available only on Windows. Video previews use the separate chart song for audio, as the Windows player does. Linux video opening and seeking run synchronously. MSAA and some less common Aet blend modes do not yet match the Windows renderer. Offline YACbCr texture export is unavailable; existing YACbCr game textures can be decoded. Optional Discord rich presence needs a separately supplied `libdiscord_game_sdk.so`.
+
 ## Building with Visual Studio 2026
 
 On Windows, install the latest stable Visual Studio 2026 with the **Desktop development with C++** workload, the latest **MSVC v145 C++ x64/x86 build tools**, and a Windows SDK.

@@ -14,10 +14,10 @@ namespace Comfy::System
 		DataMounted = true;
 
 		if (!IO::File::Exists(DataFileName))
-			Logger::LogErrorLine(__FUNCTION__"(): Unable to locate data file");
+			Logger::LogErrorLine("(): Unable to locate data file");
 
 		if (!Data.Mount(DataFileName))
-			Logger::LogErrorLine(__FUNCTION__"(): Unable to mount data file");
+			Logger::LogErrorLine("(): Unable to mount data file");
 	}
 
 	void UnMountComfyData()

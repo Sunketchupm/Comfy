@@ -133,7 +133,7 @@ namespace Comfy
 				for (size_t i = 0; i < paramCount; i++)
 				{
 					char intStrBuffer[34];
-					::_itoa_s(static_cast<i32>(command.Param[i]), intStrBuffer, 10);
+					sprintf_s(intStrBuffer, "%d", static_cast<i32>(command.Param[i]));
 					outString += intStrBuffer;
 
 					if (i + 1 != paramCount)

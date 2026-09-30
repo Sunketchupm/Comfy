@@ -614,7 +614,7 @@ namespace Comfy::Input
 		auto appendI32Str = [](std::string& outBuffer, const i32 inValue)
 		{
 			char intStrBuffer[34];
-			::_itoa_s(inValue, intStrBuffer, 10);
+			sprintf_s(intStrBuffer, "%d", inValue);
 			outBuffer += intStrBuffer;
 		};
 

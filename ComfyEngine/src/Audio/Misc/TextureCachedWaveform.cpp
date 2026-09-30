@@ -137,7 +137,7 @@ namespace Comfy::Audio
 	void TextureCachedWaveform::UpdateRenderChunkTexture(WaveformChunk& chunk, i64 startPixel)
 	{
 #if COMFY_DEBUG && 0 // DEBUG: Important to make sure chunks aren't being updated while the waveform is static
-		printf(__FUNCTION__"(): %lld px - %lld px\n", startPixel, startPixel + PixelsPerChunk);
+		printf("(): %lld px - %lld px\n", startPixel, startPixel + PixelsPerChunk);
 #endif
 
 		chunk.StartPixel = startPixel;

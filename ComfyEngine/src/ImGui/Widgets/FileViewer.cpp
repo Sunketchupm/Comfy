@@ -212,7 +212,7 @@ namespace ImGui
 			if (currentDirectoryInfo.empty())
 				Selectable("This folder is empty.", false, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_Disabled);
 
-			char displayNameBuffer[_MAX_PATH];
+			char displayNameBuffer[4096];
 			for (auto& info : currentDirectoryInfo)
 			{
 				if (!fileFilter.PassFilter(info.ChildName.c_str()))
@@ -307,7 +307,7 @@ namespace ImGui
 
 	void FileViewer::CheckAsyncUpdateDirectoryInfo()
 	{
-		if (!updateDirectoryInfoFuture.valid() || !updateDirectoryInfoFuture._Is_ready())
+		if (!updateDirectoryInfoFuture.valid() || !(updateDirectoryInfoFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready))
 			return;
 
 		updateDirectoryInfoFuture.get();
@@ -324,7 +324,7 @@ namespace ImGui
 
 	bool FileViewer::IsAsyncDirectoryInfoBusy() const
 	{
-		return (updateDirectoryInfoFuture.valid() && !updateDirectoryInfoFuture._Is_ready());
+		return (updateDirectoryInfoFuture.valid() && !(updateDirectoryInfoFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready));
 	}
 
 	void FileViewer::SetParentDirectory(const std::string& directory)

@@ -883,7 +883,7 @@ namespace Comfy::Studio::Editor
 				Gui::EndChild();
 				Gui::PopStyleVar();
 
-				if (std::all_of(tasks.begin(), tasks.end(), [](auto& future) { return future.valid() && future._Is_ready(); }))
+				if (std::all_of(tasks.begin(), tasks.end(), [](auto& future) { return future.valid() && (future.wait_for(std::chrono::seconds(0)) == std::future_status::ready); }))
 				{
 					Gui::CloseCurrentPopup();
 

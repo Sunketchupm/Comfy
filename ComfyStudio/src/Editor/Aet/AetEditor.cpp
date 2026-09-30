@@ -101,7 +101,7 @@ namespace Comfy::Studio::Editor
 
 	void AetEditor::UpdateCheckAsyncFileLoading()
 	{
-		if (!sprSetLoadFuture.valid() || !sprSetLoadFuture._Is_ready())
+		if (!sprSetLoadFuture.valid() || !(sprSetLoadFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready))
 			return;
 
 		editorSprSet = sprSetLoadFuture.get();
@@ -140,7 +140,7 @@ namespace Comfy::Studio::Editor
 
 	void AetEditor::DrawSprSetLoader()
 	{
-		sprFileViewer.SetIsReadOnly(sprSetLoadFuture.valid() && !sprSetLoadFuture._Is_ready());
+		sprFileViewer.SetIsReadOnly(sprSetLoadFuture.valid() && !(sprSetLoadFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready));
 		if (sprFileViewer.DrawGui())
 		{
 			const auto sprPath = sprFileViewer.GetFileToOpen();

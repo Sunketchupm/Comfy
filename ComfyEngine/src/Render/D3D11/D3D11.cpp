@@ -108,7 +108,7 @@ namespace Comfy::Render
 
 		if (FAILED(hr))
 		{
-			Logger::LogErrorLine(__FUNCTION__"(): Unable to create device and swap chain. Error: 0x%X", hr);
+			Logger::LogErrorLine("(): Unable to create device and swap chain. Error: 0x%X", hr);
 			return false;
 		}
 

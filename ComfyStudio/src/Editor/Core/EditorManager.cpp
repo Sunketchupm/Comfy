@@ -1,9 +1,13 @@
 #include "EditorManager.h"
 #include "Core/ComfyStudioApplication.h"
 #include "Core/ComfyStudioSettings.h"
+#ifdef _WIN32
 #include "Editor/Aet/AetEditor.h"
+#endif
 #include "Editor/Chart/ChartEditor.h"
+#ifdef _WIN32
 #include "Editor/PV/SceneEditor.h"
+#endif
 #include "Misc/StringUtil.h"
 
 namespace Comfy::Studio::Editor
@@ -94,7 +98,7 @@ namespace Comfy::Studio::Editor
 		registeredEditors.reserve(3);
 		RegisterEditorComponent<ChartEditor>("Chart Editor");
 
-#if COMFY_DEBUG || 0
+#if defined(_WIN32) && (COMFY_DEBUG || 0)
 		RegisterEditorComponent<AetEditor>("Aet Editor");
 		RegisterEditorComponent<SceneEditor>("Scene Editor");
 #endif
@@ -115,7 +119,7 @@ namespace Comfy::Studio::Editor
 
 	void EditorManager::GuiWorkSpaceMenu()
 	{
-#if COMFY_DEBUG || 0
+#if defined(_WIN32) && (COMFY_DEBUG || 0)
 		if (Gui::BeginMenu("Workspace"))
 		{
 			for (size_t i = 0; i < registeredEditors.size(); i++)

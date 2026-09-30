@@ -25,6 +25,6 @@ namespace Comfy::Studio::Editor
 
 	void RotateTool::DrawContextMenu()
 	{
-		// TODO: Rotation presets (0걢; 90걢; 180걢; 270걢;")
+		// TODO: Rotation presets (0째; 90째; 180째; 270째;")
 	}
 }

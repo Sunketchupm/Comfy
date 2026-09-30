@@ -18,7 +18,7 @@ namespace Comfy::System
 	{
 		if (GetLibraryLoaded())
 		{
-			Logger::LogErrorLine(__FUNCTION__ "(): Library already loaded");
+			Logger::LogErrorLine("(): Library already loaded");
 			return false;
 		}
 
@@ -43,7 +43,7 @@ namespace Comfy::System
 		if (!wasSuccessful)
 		{
 			const int loadLibraryError = ::GetLastError();
-			Logger::LogErrorLine(__FUNCTION__ "(): Unable to load library %s. Error: %d", libraryName.c_str(), loadLibraryError);
+			Logger::LogErrorLine("(): Unable to load library %s. Error: %d", libraryName.c_str(), loadLibraryError);
 		}
 
 		return wasSuccessful;

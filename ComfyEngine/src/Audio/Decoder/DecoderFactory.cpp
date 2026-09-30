@@ -40,7 +40,7 @@ namespace Comfy::Audio
 	{
 		if (!IO::File::Exists(filePath))
 		{
-			Logger::LogErrorLine(__FUNCTION__"(): Input file %.*s not found", filePath.size(), filePath.data());
+			Logger::LogErrorLine("(): Input file %.*s not found", filePath.size(), filePath.data());
 			return nullptr;
 		}
 
@@ -53,7 +53,7 @@ namespace Comfy::Audio
 			const auto[fileContent, fileSize] = IO::File::ReadAllBytes(filePath);
 			if (fileContent == nullptr)
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Unable to read input file %.*s", filePath.size(), filePath.data());
+				Logger::LogErrorLine("(): Unable to read input file %.*s", filePath.size(), filePath.data());
 				return nullptr;
 			}
 
@@ -66,7 +66,7 @@ namespace Comfy::Audio
 		if (TryDecodeAndParseFileUsingMediaFoundation(filePath, mediaFoundationOutputData) == DecoderResult::Success)
 			return ProcessDecoderOutputDataToMemorySampleProvider(mediaFoundationOutputData);
 
-		Logger::LogErrorLine(__FUNCTION__"(): No compatible IDecoder found for the input file %.*s", filePath.size(), filePath.data());
+		Logger::LogErrorLine("(): No compatible IDecoder found for the input file %.*s", filePath.size(), filePath.data());
 		return nullptr;
 	}
 
@@ -82,7 +82,7 @@ namespace Comfy::Audio
 				return DecodeAndProcessFileContentUsingDecoder(*decoder, fileContent, fileSize);
 		}
 
-		Logger::LogErrorLine(__FUNCTION__"(): No compatible IDecoder found for the input file %.*s", fileName.size(), fileName.data());
+		Logger::LogErrorLine("(): No compatible IDecoder found for the input file %.*s", fileName.size(), fileName.data());
 		return nullptr;
 	}
 

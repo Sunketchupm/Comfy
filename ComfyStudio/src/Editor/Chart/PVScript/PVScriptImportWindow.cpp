@@ -628,7 +628,7 @@ namespace Comfy::Studio::Editor
 			isFirstFrameAfterStartingAsyncLoad = false;
 		}
 
-		if (inScript.LoadAndDecomposeChartFileFuture.valid() && inScript.LoadAndDecomposeChartFileFuture._Is_ready())
+		if (inScript.LoadAndDecomposeChartFileFuture.valid() && (inScript.LoadAndDecomposeChartFileFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready))
 		{
 			inScript.LoadAndDecomposeChartFileFuture.get();
 			importSettings.TargetOffset = TimeSpan::Zero();

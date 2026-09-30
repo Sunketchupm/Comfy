@@ -37,19 +37,19 @@ namespace Comfy::Studio::Editor
 
 	Render::TexSprView AsyncLoadedImageFile::GetTexSprView()
 	{
-		if (future.valid() && future._Is_ready())
+		if (future.valid() && (future.wait_for(std::chrono::seconds(0)) == std::future_status::ready))
 			GetMoveFuture();
 		return (texture != nullptr) ? Render::TexSprView { texture.get(), &sprite } : Render::TexSprView { nullptr, nullptr };
 	}
 
 	bool AsyncLoadedImageFile::IsAsyncLoaded() const
 	{
-		return (!future.valid() || future._Is_ready());
+		return (!future.valid() || (future.wait_for(std::chrono::seconds(0)) == std::future_status::ready));
 	}
 
 	bool AsyncLoadedImageFile::IsAsyncLoading() const
 	{
-		return (future.valid() && !future._Is_ready());
+		return (future.valid() && !(future.wait_for(std::chrono::seconds(0)) == std::future_status::ready));
 	}
 
 	void AsyncLoadedImageFile::GetMoveFuture()

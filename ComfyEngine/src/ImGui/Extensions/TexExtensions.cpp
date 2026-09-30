@@ -1,5 +1,5 @@
 #include "TexExtensions.h"
-#include "ImguiExtensions.h"
+#include "ImGuiExtensions.h"
 
 using namespace Comfy::Graphics;
 

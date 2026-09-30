@@ -1,5 +1,10 @@
 #pragma once
 #include <stdint.h>
+#include "Core/CompilerCompatibility.h"
+#include <algorithm>
+#include <cstring>
+#include <limits>
+#include <optional>
 
 // NOTE: Dummy types for storing still unknown data, not to be used for normal code
 using unk8_t = uint8_t;

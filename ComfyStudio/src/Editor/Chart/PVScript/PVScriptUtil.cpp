@@ -261,7 +261,7 @@ namespace Comfy::Studio::Editor
 					for (size_t i = 0; i < paramCount; i++)
 					{
 						char intStrBuffer[34];
-						::_itoa_s(static_cast<i32>(command.Param[i]), intStrBuffer, 10);
+						sprintf_s(intStrBuffer, "%d", static_cast<i32>(command.Param[i]));
 
 						guiSameLineText(intStrBuffer);
 

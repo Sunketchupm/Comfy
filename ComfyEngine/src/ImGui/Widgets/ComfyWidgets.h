@@ -1,5 +1,5 @@
 #pragma once
-#include "ImGui/Extensions/ImguiExtensions.h"
+#include "ImGui/Extensions/ImGuiExtensions.h"
 
 namespace ImGui
 {

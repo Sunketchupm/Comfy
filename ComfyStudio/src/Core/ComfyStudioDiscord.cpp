@@ -27,7 +27,11 @@ namespace Comfy::Studio
 
 			struct DynamicLinkLibrary
 			{
-				System::LibraryLoader Loader { "discord_game_sdk.dll" };
+				#ifdef _WIN32
+                System::LibraryLoader Loader { "discord_game_sdk.dll" };
+#else
+                System::LibraryLoader Loader { "libdiscord_game_sdk.so" };
+#endif
 				DiscordCreateFunc* ImportedDiscordCreateFunc = nullptr;
 			} DLL = {};
 

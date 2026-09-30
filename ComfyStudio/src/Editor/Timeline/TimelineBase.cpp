@@ -357,7 +357,7 @@ namespace Comfy::Studio::Editor
 	void TimelineBase::DrawTimelineGui()
 	{
 #if 0 // DEBUG:
-		if (Gui::Begin(__FUNCTION__" DEBUG REGIONS", nullptr, ImGuiWindowFlags_NoSavedSettings))
+		if (Gui::Begin(" DEBUG REGIONS", nullptr, ImGuiWindowFlags_NoSavedSettings))
 		{
 			auto drawRegionIfHighlighted = [](const char* name, const ImRect& region, ImDrawList* drawList = Gui::GetForegroundDrawList())
 			{

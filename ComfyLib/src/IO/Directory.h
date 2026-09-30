@@ -29,13 +29,10 @@ namespace Comfy::IO
 					}
 				};
 
-				if (!Path::GetExtension(directoryPath).empty())
-					return;
-
 				if constexpr (IterateRecursive)
-					iterateGeneric(std::filesystem::recursive_directory_iterator(UTF8::WideArg(directoryPath).c_str()));
+					iterateGeneric(std::filesystem::recursive_directory_iterator(std::filesystem::u8path(directoryPath)));
 				else
-					iterateGeneric(std::filesystem::directory_iterator(UTF8::WideArg(directoryPath).c_str()));
+					iterateGeneric(std::filesystem::directory_iterator(std::filesystem::u8path(directoryPath)));
 			}
 		}
 

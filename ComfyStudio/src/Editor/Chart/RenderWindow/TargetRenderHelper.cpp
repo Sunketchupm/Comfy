@@ -13,7 +13,7 @@ namespace Comfy
 	template <typename Future, typename Type>
 	bool GetFutureIfReady(Future& inFuture, Type& outValue)
 	{
-		if (inFuture.valid() && inFuture._Is_ready())
+		if (inFuture.valid() && (inFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready))
 		{
 			outValue = inFuture.get();
 			return true;

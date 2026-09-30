@@ -2,7 +2,11 @@
 #include "Resample.h"
 #include "SampleMix.h"
 #include "Backend/IAudioBackend.h"
+#ifdef _WIN32
 #include "Backend/WASAPIBackend.h"
+#else
+#include "Platform/Linux/SDLBackend.h"
+#endif
 #include "Audio/Decoder/DecoderFactory.h"
 #include "Audio/Decoder/Detail/Decoders.h"
 #include "Core/Logger.h"
@@ -37,9 +41,16 @@ namespace Comfy::Audio
 		{
 			switch (backend)
 			{
-			case AudioBackend::WASAPIShared:
+#ifndef _WIN32
+            case AudioBackend::SDL:
+#endif
+            case AudioBackend::WASAPIShared:
 			case AudioBackend::WASAPIExclusive:
-				return std::make_unique<WASAPIBackend>();
+				#ifdef _WIN32
+                return std::make_unique<WASAPIBackend>();
+#else
+                return std::make_unique<SDLBackend>();
+#endif
 			}
 
 			assert(false);
@@ -103,7 +114,7 @@ namespace Comfy::Audio
 	public:
 		ChannelMixer ChannelMixer = {};
 
-		AudioBackend CurrentBackendType = {};
+		AudioBackend CurrentBackendType = AudioBackend::Default;
 		std::unique_ptr<IAudioBackend> CurrentBackend = nullptr;
 		// TODO: Fallback backend interface
 

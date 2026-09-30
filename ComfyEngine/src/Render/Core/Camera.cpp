@@ -78,7 +78,7 @@ namespace Comfy::Render
 			return vec2(std::numeric_limits<float>::infinity());
 
 		// NOTE: Perspective division
-		const vec3 perspectivePosition = vec3(projectedPosition.xyz) / projectedPosition.w;
+		const vec3 perspectivePosition = vec3(projectedPosition) / projectedPosition.w;
 
 		// NOTE: Center around top left origin like all other window coordinates are
 		const vec2 normalizedScreenPosition =
@@ -157,12 +157,12 @@ namespace Comfy::Render
 
 	vec3 Camera3D::ScreenToWorldSpace(const mat4& matrix, const vec3& screenSpace)
 	{
-		return (glm::inverse(matrix) * vec4(screenSpace, 1.0f)).xyz;
+		return vec3(glm::inverse(matrix) * vec4(screenSpace, 1.0f));
 	}
 
 	vec3 Camera3D::WorldToScreenSpace(const mat4& matrix, const vec3& worldSpace)
 	{
-		return (matrix * vec4(worldSpace, 1.0f)).xyz;
+		return vec3(matrix * vec4(worldSpace, 1.0f));
 	}
 
 	vec2 Camera2D::GetProjectionCenter() const
@@ -207,11 +207,11 @@ namespace Comfy::Render
 
 	vec2 Camera2D::ScreenToWorldSpace(const mat4& matrix, const vec2& screenSpace)
 	{
-		return (glm::inverse(matrix) * vec4(screenSpace, 0.0f, 1.0f)).xy;
+		return vec2(glm::inverse(matrix) * vec4(screenSpace, 0.0f, 1.0f));
 	}
 
 	vec2 Camera2D::WorldToScreenSpace(const mat4& matrix, const vec2& worldSpace)
 	{
-		return (matrix * vec4(worldSpace, 0.0f, 1.0f)).xy;
+		return vec2(matrix * vec4(worldSpace, 0.0f, 1.0f));
 	}
 }

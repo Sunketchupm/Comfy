@@ -143,7 +143,11 @@ namespace Comfy::Studio
 		if (Audio::AudioEngine::InstanceValid())
 		{
 			auto& audioEngine = Audio::AudioEngine::GetInstance();
-			audioEngine.SetAudioBackend(GlobalUserData.System.Audio.RequestExclusiveDeviceAccess ? Audio::AudioBackend::WASAPIExclusive : Audio::AudioBackend::WASAPIShared);
+			#ifdef _WIN32
+            audioEngine.SetAudioBackend(GlobalUserData.System.Audio.RequestExclusiveDeviceAccess ? Audio::AudioBackend::WASAPIExclusive : Audio::AudioBackend::WASAPIShared);
+#else
+            audioEngine.SetAudioBackend(Audio::AudioBackend::SDL);
+#endif
 
 			if (GlobalUserData.System.Audio.OpenDeviceOnStartup)
 				audioEngine.OpenStartStream();
@@ -154,7 +158,11 @@ namespace Comfy::Studio
 
 	ApplicationHost::ConstructionParam ComfyStudioApplication::CreateHostParam()
 	{
-		const auto comfyIcon = ::LoadIconW(::GetModuleHandleW(nullptr), MAKEINTRESOURCEW(COMFY_ICON));
+		#ifdef _WIN32
+        const auto comfyIcon = ::LoadIconW(::GetModuleHandleW(nullptr), MAKEINTRESOURCEW(COMFY_ICON));
+#else
+        void* comfyIcon = nullptr;
+#endif
 
 		ApplicationHost::ConstructionParam hostParam;
 		hostParam.StartupWindowState.Title = ComfyStudioWindowTitle;
@@ -172,10 +180,12 @@ namespace Comfy::Studio
 		editorManager = std::make_unique<Editor::EditorManager>(*this);
 
 		testWindows.reserve(4);
-		testWindows.push_back(std::make_unique<DataTest::InputTestWindow>(*this));
+#ifdef _WIN32
+        testWindows.push_back(std::make_unique<DataTest::InputTestWindow>(*this));
 		testWindows.push_back(std::make_unique<DataTest::AudioTestWindow>(*this));
 		testWindows.push_back(std::make_unique<DataTest::MovieTestWindow>(*this));
-		testWindows.push_back(std::make_unique<DataTest::IconTestWindow>(*this));
+        testWindows.push_back(std::make_unique<DataTest::IconTestWindow>(*this));
+#endif
 
 		return true;
 	}
@@ -536,7 +546,10 @@ namespace Comfy::Studio
 		{
 			switch (backend)
 			{
-			case Audio::AudioBackend::WASAPIShared: return "WASAPI Shared";
+#ifndef _WIN32
+            case Audio::AudioBackend::SDL: return "SDL";
+#endif
+            case Audio::AudioBackend::WASAPIShared: return "WASAPI Shared";
 			case Audio::AudioBackend::WASAPIExclusive: return "WASAPI Exclusive";
 			default: return "Invalid";
 			}
@@ -578,7 +591,11 @@ namespace Comfy::Studio
 				audioEngine->StopCloseStream();
 			Gui::Separator();
 
-			static constexpr std::array availableBackends = { Audio::AudioBackend::WASAPIShared, Audio::AudioBackend::WASAPIExclusive, };
+			#ifdef _WIN32
+            static constexpr std::array availableBackends = { Audio::AudioBackend::WASAPIShared, Audio::AudioBackend::WASAPIExclusive };
+#else
+            static constexpr std::array availableBackends = { Audio::AudioBackend::SDL };
+#endif
 
 			const auto currentBackend = audioEngine->GetAudioBackend();
 			for (const auto backendType : availableBackends)

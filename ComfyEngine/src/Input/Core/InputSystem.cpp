@@ -282,7 +282,7 @@ namespace Comfy::Input
 
 		if (FAILED(result))
 		{
-			Logger::LogErrorLine(__FUNCTION__"(): Failed to initialize DirectInput. Error: %d", result);
+			Logger::LogErrorLine("(): Failed to initialize DirectInput. Error: %d", result);
 		}
 		else
 		{

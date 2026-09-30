@@ -10,7 +10,7 @@ namespace Comfy::Studio::Editor
 	class ComfyStudioChartFile : public IO::IStreamReadable, public IO::IStreamWritable, NonCopyable
 	{
 	public:
-		// NOTE: Comfy Studio ïàñ  (Fumen)
+		// NOTE: Comfy Studio Ë≠úÈù¢ (Fumen)
 		static constexpr std::string_view Extension = ".csfm";
 		static constexpr std::string_view FilterName = "Comfy Studio Chart";
 		static constexpr std::string_view FilterSpec = "*.csfm";

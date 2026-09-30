@@ -73,7 +73,12 @@ namespace Comfy::IO
 				filePath = archivePath.BasePath;
 
 			const auto fileName = GetFileName(filePath);
-			return fileName.empty() ? filePath : filePath.substr(0, filePath.size() - fileName.size() - 1);
+			if (fileName.empty())
+                return filePath;
+            const auto separator = filePath.find_last_of(DirectorySeparators);
+            if (separator == std::string_view::npos)
+                return "";
+            return filePath.substr(0, separator == 0 ? 1 : separator);
 		}
 
 		COMFY_NODISCARD bool IsRelative(std::string_view filePath);

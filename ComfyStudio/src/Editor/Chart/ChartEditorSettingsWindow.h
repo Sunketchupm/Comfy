@@ -84,22 +84,22 @@ namespace Comfy::Studio::Editor
 		struct NamedTab { const char* Name; void(ChartEditorSettingsWindow::*GuiFunction)(ComfyStudioUserSettings&); };
 		static constexpr NamedTab namedTabs[] =
 		{
-			{ "General", &GuiTabGeneral },
-			{ "Timeline", &GuiTabTimeline },
-			{ "Tools", &GuiTabTools },
-			{ "Interface", &GuiTabInterface },
-			{ "Playtest", &GuiTabPlaytest },
-			{ "Auto Save", &GuiTabAutoSave },
+			{ "General", &ChartEditorSettingsWindow::GuiTabGeneral },
+			{ "Timeline", &ChartEditorSettingsWindow::GuiTabTimeline },
+			{ "Tools", &ChartEditorSettingsWindow::GuiTabTools },
+			{ "Interface", &ChartEditorSettingsWindow::GuiTabInterface },
+			{ "Playtest", &ChartEditorSettingsWindow::GuiTabPlaytest },
+			{ "Auto Save", &ChartEditorSettingsWindow::GuiTabAutoSave },
 #if COMFY_COMILE_WITH_DLL_DISCORD_RICH_PRESENCE_INTEGRATION
-			{ "Discord", &GuiTabDiscord },
+			{ "Discord", &ChartEditorSettingsWindow::GuiTabDiscord },
 #endif
-			{ "Audio", &GuiTabAudio },
-			{ "Controller Layout", &GuiTabControllerLayout },
+			{ "Audio", &ChartEditorSettingsWindow::GuiTabAudio },
+			{ "Controller Layout", &ChartEditorSettingsWindow::GuiTabControllerLayout },
 			// TODO: Only problem is that this also includes things like "Playtest Pause" so not really exclusive to "Editor"...
-			{ "Editor Bindings", &GuiTabEditorBindings },
-			{ "Playtest Bindings", &GuiTabPlaytestBindings },
+			{ "Editor Bindings", &ChartEditorSettingsWindow::GuiTabEditorBindings },
+			{ "Playtest Bindings", &ChartEditorSettingsWindow::GuiTabPlaytestBindings },
 #if COMFY_DEBUG && 0
-			{ "Theme (Debug)", &GuiTabThemeDebug },
+			{ "Theme (Debug)", &ChartEditorSettingsWindow::GuiTabThemeDebug },
 #endif
 		};
 	};

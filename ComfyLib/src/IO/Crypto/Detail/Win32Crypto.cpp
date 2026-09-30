@@ -32,11 +32,11 @@ namespace Comfy::IO::Crypto::Detail
 				}
 
 				if (!NT_SUCCESS(status))
-					Logger::LogErrorLine(__FUNCTION__"(): BCryptSetProperty() failed with 0x%X", status);
+					Logger::LogErrorLine("(): BCryptSetProperty() failed with 0x%X", status);
 			}
 			else
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): BCryptOpenAlgorithmProvider() failed with 0x%X", status);
+				Logger::LogErrorLine("(): BCryptOpenAlgorithmProvider() failed with 0x%X", status);
 			}
 		}
 
@@ -55,7 +55,7 @@ namespace Comfy::IO::Crypto::Detail
 		{
 			if (!algorithm.Handle)
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): Invalid AlgorithmProvider::Handle");
+				Logger::LogErrorLine("(): Invalid AlgorithmProvider::Handle");
 				return;
 			}
 
@@ -71,11 +71,11 @@ namespace Comfy::IO::Crypto::Detail
 				status = BCryptGenerateSymmetricKey(algorithm.Handle, &Handle, KeyObject.data(), keyObjectSize, key.data(), static_cast<ULONG>(key.size()), 0);
 
 				if (!NT_SUCCESS(status))
-					Logger::LogErrorLine(__FUNCTION__"(): BCryptGenerateSymmetricKey() failed with 0x%X", status);
+					Logger::LogErrorLine("(): BCryptGenerateSymmetricKey() failed with 0x%X", status);
 			}
 			else
 			{
-				Logger::LogErrorLine(__FUNCTION__"(): BCryptGetProperty() failed with 0x%X", status);
+				Logger::LogErrorLine("(): BCryptGetProperty() failed with 0x%X", status);
 			}
 		}
 
@@ -93,7 +93,7 @@ namespace Comfy::IO::Crypto::Detail
 	{
 		if (!key.Handle)
 		{
-			Logger::LogErrorLine(__FUNCTION__"(): Invalid SymmetricKey::Handle");
+			Logger::LogErrorLine("(): Invalid SymmetricKey::Handle");
 			return false;
 		}
 
@@ -104,7 +104,7 @@ namespace Comfy::IO::Crypto::Detail
 
 		if (!NT_SUCCESS(status))
 		{
-			Logger::LogErrorLine(__FUNCTION__"(): BCryptDecrypt() failed with 0x%X", status);
+			Logger::LogErrorLine("(): BCryptDecrypt() failed with 0x%X", status);
 			return false;
 		}
 

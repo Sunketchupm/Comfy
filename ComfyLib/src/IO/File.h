@@ -74,7 +74,7 @@ namespace Comfy::IO
 			else if constexpr (std::is_base_of_v<IBufferParsable, Loadable>)
 				return LoadBufferParsable<Loadable>(filePath);
 			else
-				static_assert(false, "Unable to load class type");
+				static_assert(sizeof(Loadable) == 0, "Unable to load class type");
 		}
 
 		template <typename Writable>

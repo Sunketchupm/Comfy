@@ -56,7 +56,7 @@ namespace Comfy::Audio
 
 	bool SfxArchive::IsAsyncLoaded() const
 	{
-		return (!loadFuture.valid() || loadFuture._Is_ready());
+		return (!loadFuture.valid() || (loadFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready));
 	}
 
 	void SfxArchive::WaitUntilAsyncLoaded()

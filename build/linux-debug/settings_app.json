@@ -1,0 +1,30 @@
+{
+	".file_version": "1.5.1",
+	"last_session_window_state": {
+		"restore_region_x": -128,
+		"restore_region_y": 24,
+		"restore_region_w": 1280,
+		"restore_region_h": 720,
+		"position_x": -128,
+		"position_y": 24,
+		"size_x": 1280,
+		"size_y": 720,
+		"is_fullscreen": false,
+		"is_maximized": false,
+		"swap_interval": 1,
+		"active_editor_component": "Chart Editor"
+	},
+	"last_pv_script_export_options": {
+		"export_format": null,
+		"pv_id": null,
+		"root_directory": null,
+		"mdata_id": null,
+		"background_dim": null,
+		"merge_with_existing_mdata": null,
+		"create_spr_sel_pv": null,
+		"vorbis_vbr_quality": null
+	},
+	"recent_files": {
+		"chart_files": []
+	}
+}

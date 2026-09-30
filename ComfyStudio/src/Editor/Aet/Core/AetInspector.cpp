@@ -461,7 +461,7 @@ namespace Comfy::Studio::Editor
 		bool isRotation = (field == Transform2DField_Rotation);
 		bool isOpacity = (field == Transform2DField_Opacity);
 
-		const char* formatString = isRotation ? u8"%.2f Åã" : isOpacity ? "%.2f%%" : "%.2f";
+		const char* formatString = isRotation ? u8"%.2f ¬∞" : isOpacity ? "%.2f%%" : "%.2f";
 		float min = 0.0f, max = 0.0f;
 
 		if (isOpacity)
