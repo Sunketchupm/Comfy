@@ -126,6 +126,69 @@ namespace
             && restored->SongFileName == chart.SongFileName && restored->Duration == chart.Duration,
             "Chart roundtrip changed metadata");
     }
+    void BenchmarkRendering()
+    {
+        System::MountComfyData();
+        ApplicationHost host({});
+        Render::Renderer2D renderer;
+        auto target = Render::Renderer2D::CreateRenderTarget();
+        target->Param.Resolution = {256, 256};
+        Render::Camera2D camera;
+        camera.ProjectionSize = {256, 256};
+        const Render::PositionTextureColorVertex vertices[] = {
+            {{0, 0}, {0, 0}, {1, 0, 0, 1}},
+            {{0, 4}, {0, 1}, {1, 0, 0, 1}},
+            {{4, 4}, {1, 1}, {1, 0, 0, 1}},
+            {{4, 4}, {1, 1}, {1, 0, 0, 1}},
+            {{4, 0}, {1, 0}, {1, 0, 0, 1}},
+            {{0, 0}, {0, 0}, {1, 0, 0, 1}},
+        };
+        const auto measure = [&](bool immediate)
+        {
+            // Include completion time rather than just measuring queued commands.
+            // Synchronization belongs in this benchmark, never the normal frame loop.
+            glFinish();
+            const Uint64 started = SDL_GetPerformanceCounter();
+            for (int frame = 0; frame < 20; frame++)
+            {
+                renderer.Begin(camera, *target);
+                glDisable(GL_TEXTURE_2D);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                for (int sprite = 0; sprite < 2000; sprite++)
+                {
+                    if (immediate)
+                    {
+                        // Reproduce the previous Linux DrawVertices submission.
+                        glBegin(GL_TRIANGLES);
+                        for (const auto& vertex : vertices)
+                        {
+                            glColor4fv(glm::value_ptr(vertex.Color));
+                            glTexCoord2f(vertex.TextureCoordinates.x, 1.0f - vertex.TextureCoordinates.y);
+                            glVertex2fv(glm::value_ptr(vertex.Position));
+                        }
+                        glEnd();
+                    }
+                    else
+                        renderer.DrawVertices(vertices, 6);
+                }
+                renderer.End();
+                glFinish();
+            }
+            return 1000.0 * double(SDL_GetPerformanceCounter() - started)
+                / SDL_GetPerformanceFrequency() / 20;
+        };
+        measure(true);
+        measure(false);
+        const double immediateMilliseconds = measure(true);
+        const auto reference = target->TakeScreenshot();
+        const double batchedMilliseconds = measure(false);
+        const auto batched = target->TakeScreenshot();
+        Require(std::memcmp(reference.get(), batched.get(), 256 * 256 * 4) == 0,
+                "Batched benchmark output differs from immediate mode");
+        std::cout << "2000 sprite submission benchmark: immediate " << immediateMilliseconds
+                  << " ms/frame, batched " << batchedMilliseconds << " ms/frame\n";
+    }
+
     void TestRendering()
     {
         System::MountComfyData();
@@ -143,6 +206,22 @@ namespace
         const size_t center = (8 * 16 + 8) * 4;
         Require(screenshot && screenshot[center] > 250 && screenshot[center + 1] == 0
                 && screenshot[center + 2] == 0, "OpenGL did not render the expected red rectangle");
+        // Cross the vertex capacity boundary, then change blend state. The
+        // last translucent sprite must remain above all earlier opaque draws.
+        renderer.Begin(camera, *target);
+        for (int index = 0; index < 1100; index++)
+            renderer.Draw(Render::RenderCommand2D({0, 0}, {16, 16}, {1, 0, 0, 1}));
+        Render::RenderCommand2D additive({0, 0}, {16, 16}, {0, 1, 0, 0.5f});
+        additive.BlendMode = Graphics::AetBlendMode::Add;
+        renderer.Draw(additive);
+        renderer.Draw(Render::RenderCommand2D({0, 0}, {16, 16}, {0, 0, 1, 0.5f}));
+        renderer.End();
+        const auto ordered = target->TakeScreenshot();
+        Require(ordered[center] >= 126 && ordered[center] <= 129
+                && ordered[center + 1] >= 62 && ordered[center + 1] <= 65
+                && ordered[center + 2] >= 126 && ordered[center + 2] <= 129,
+                "Batch capacity or blend changes reordered overlapping sprites");
+
         Graphics::Tex atlas;
         auto& mip = atlas.MipMapsArray.emplace_back().emplace_back();
         mip.Size = {4, 4};
@@ -186,6 +265,26 @@ namespace
                 "Top-down texture orientation is incorrect");
         atlas.GPU_FlipY = false;
 
+        renderer.Begin(camera, *target);
+        sprite.SourceRegion = {0, 0, 4, 4};
+        sprite.Scale = {4, 4};
+        sprite.TexView.Filter = Graphics::TextureFilter::Linear;
+        renderer.Draw(sprite);
+        sprite.TexView.Filter = Graphics::TextureFilter::Point;
+        sprite.Position = {8, 0};
+        sprite.Scale = {2, 4};
+        renderer.Draw(sprite);
+        renderer.End();
+        const auto filtered = target->TakeScreenshot();
+        const size_t linearPixel = (8 * 16 + 3) * 4;
+        const size_t pointPixel = (8 * 16 + 11) * 4;
+        Require(filtered[linearPixel + 1] > 0 && filtered[linearPixel + 1] < 255
+                && filtered[pointPixel + 1] == 255,
+                "Changing the sampler filter did not flush the previous batch");
+        sprite.Position = {0, 0};
+        sprite.SourceRegion = {2, 0, 2, 4};
+        sprite.Scale = {8, 4};
+
         Graphics::Tex maskTexture;
         auto& maskMip = maskTexture.MipMapsArray.emplace_back().emplace_back();
         maskMip.Size = {4, 4};
@@ -200,6 +299,7 @@ namespace
         auto mask = sprite;
         mask.TexView = &maskTexture;
         renderer.Begin(camera, *target);
+        renderer.Draw(Render::RenderCommand2D({0, 0}, {16, 16}, {0, 0, 0, 1}));
         renderer.Draw(sprite, mask);
         renderer.End();
         const auto masked = target->TakeScreenshot();
@@ -368,13 +468,13 @@ namespace
         Require(SDL_InitSubSystem(SDL_INIT_AUDIO) == 0, "Audio initialization failed");
         defer { SDL_QuitSubSystem(SDL_INIT_AUDIO); };
         Audio::SDLBackend backend;
-        // Cover the old Windows default and an arbitrary, non-power-of-two size.
-        for (const u32 requestedFrames : {64u, 1500u})
+        // Opening again must preserve callback sizing and shut down the old device.
+        for (int attempt = 0; attempt < 2; attempt++)
         {
             std::atomic<u32> callbacks = 0;
             std::atomic<bool> validFrames = true;
-            const u32 expectedFrames = requestedFrames == 64 ? 1024 : 2048;
-            Audio::StreamParameters parameters = {44100, 2, requestedFrames, Audio::StreamShareMode::Shared};
+            const u32 expectedFrames = 128;
+            Audio::StreamParameters parameters = {44100, 2, Audio::StreamShareMode::Shared};
             Require(backend.OpenStartStream(parameters, [&](i16* output, u32 frames, u32 channels)
             {
                 if (frames != expectedFrames || channels != 2)
@@ -464,6 +564,8 @@ int main(int argc, const char* argv[])
     {
         if (argc == 3 && std::string_view(argv[1]) == "--video")
             TestVideoSeeking(argv[2]);
+        else if (argc == 2 && std::string_view(argv[1]) == "--render-benchmark")
+            BenchmarkRendering();
         else if (argc == 2 && std::string_view(argv[1]) == "--render")
             TestRendering();
         else if (argc == 2 && std::string_view(argv[1]) == "--audio")

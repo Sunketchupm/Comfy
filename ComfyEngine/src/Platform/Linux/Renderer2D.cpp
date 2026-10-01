@@ -1,5 +1,7 @@
 #include "OpenGL.h"
 #include <stdexcept>
+#include <cstddef>
+#include <vector>
 #include "Render/Core/Renderer2D/Renderer2D.h"
 #include "Render/Core/Renderer2D/Detail/SpriteBatchData.h"
 namespace Comfy::Render
@@ -62,6 +64,8 @@ namespace Comfy::Render
     };
     namespace
     {
+        constexpr size_t MaxBatchVertices = 6144;
+
         GLuint CreateSpriteProgram(const char* fragmentSource)
         {
             const char* vertexSource = "#version 120\n"
@@ -114,8 +118,16 @@ namespace Comfy::Render
         OpenGLRenderTarget* Target = nullptr;
         GLint PreviousFramebuffer = 0, PreviousProgram = 0;
         GLuint MaskProgram = 0, CheckerboardProgram = 0, PostProcessProgram = 0;
+        GLuint VertexBuffer = 0;
+        std::vector<PositionTextureColorVertex> Vertices;
+        TexSamplerView BatchView;
+        Graphics::AetBlendMode BatchBlend = {};
+        Graphics::PrimitiveType BatchPrimitive = {};
+        void Flush();
         Impl(Renderer2D& renderer) : Aet(renderer), Font(renderer)
         {
+            glGenBuffers(1, &VertexBuffer);
+            Vertices.reserve(MaxBatchVertices);
             MaskProgram = CreateSpriteProgram("#version 120\n"
                 "uniform sampler2D sprite; uniform sampler2D mask; uniform int textured;"
                 "varying vec2 uv; varying vec2 maskUV; varying vec4 color;"
@@ -137,6 +149,7 @@ namespace Comfy::Render
         }
         ~Impl()
         {
+            glDeleteBuffers(1, &VertexBuffer);
             glDeleteProgram(MaskProgram);
             glDeleteProgram(CheckerboardProgram);
             glDeleteProgram(PostProcessProgram);
@@ -182,15 +195,47 @@ namespace Comfy::Render
     {
         if (!vertices || !count)
             return;
+        // Do not join strips/fans or incomplete primitives across draw boundaries.
+        size_t groupSize = 0;
+        switch (primitive)
+        {
+        case Graphics::PrimitiveType::Points: groupSize = 1; break;
+        case Graphics::PrimitiveType::Lines: groupSize = 2; break;
+        case Graphics::PrimitiveType::Triangles: groupSize = 3; break;
+        case Graphics::PrimitiveType::Quads: groupSize = 4; break;
+        default: break;
+        }
+        const bool canMerge = groupSize != 0 && count % groupSize == 0;
+        if (!canMerge || impl->BatchView != view || impl->BatchView.Filter != view.Filter
+            || impl->BatchBlend != blend || impl->BatchPrimitive != primitive
+            || impl->Vertices.size() + count > MaxBatchVertices)
+            impl->Flush();
+        impl->BatchView = view;
+        impl->BatchBlend = blend;
+        impl->BatchPrimitive = primitive;
+        for (size_t index = 0; index < count; index++)
+        {
+            auto vertex = vertices[index];
+            vertex.TextureCoordinates.y = 1.0f - vertex.TextureCoordinates.y;
+            impl->Vertices.push_back(vertex);
+        }
+        if (!canMerge)
+            impl->Flush();
+    }
+    void Renderer2D::Impl::Flush()
+    {
+        if (Vertices.empty())
+            return;
         glUseProgram(0);
         glActiveTexture(GL_TEXTURE0);
-        switch (blend)
+        switch (BatchBlend)
         {
         case Graphics::AetBlendMode::Add: glBlendFunc(GL_SRC_ALPHA, GL_ONE); break;
         case Graphics::AetBlendMode::LinearDodge: glBlendFunc(GL_ONE, GL_ONE); break;
         case Graphics::AetBlendMode::Multiply: glBlendFunc(GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA); break;
         default: glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); break;
         }
+        const auto& view = BatchView;
         if (view)
         {
             glEnable(GL_TEXTURE_2D);
@@ -214,7 +259,7 @@ namespace Comfy::Render
         // The placement grid supplies independent line segments. Preserve the
         // requested topology instead of interpreting every vertex list as triangles.
         GLenum mode;
-        switch (primitive)
+        switch (BatchPrimitive)
         {
         case Graphics::PrimitiveType::Points: mode = GL_POINTS; break;
         case Graphics::PrimitiveType::Lines: mode = GL_LINES; break;
@@ -228,17 +273,27 @@ namespace Comfy::Render
         case Graphics::PrimitiveType::Polygon: mode = GL_POLYGON; break;
         default: throw std::invalid_argument("Unsupported 2D primitive type");
         }
-        glBegin(mode);
-        for (size_t index = 0; index < count; index++)
-        {
-            glColor4fv(glm::value_ptr(vertices[index].Color));
-            // Sprite regions use top-left coordinates, while game atlas pixels
-            // are stored bottom-up. Match the Windows sprite vertex shader.
-            const auto uv = vertices[index].TextureCoordinates;
-            glTexCoord2f(uv.x, 1.0f - uv.y);
-            glVertex2fv(glm::value_ptr(vertices[index].Position));
-        }
-        glEnd();
+        GLint previousBuffer;
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousBuffer);
+        glPushClientAttrib(GL_CLIENT_VERTEX_ARRAY_BIT);
+        glClientActiveTexture(GL_TEXTURE0);
+        glBindBuffer(GL_ARRAY_BUFFER, VertexBuffer);
+        // Replace storage so queued draws can keep using the previous upload.
+        glBufferData(GL_ARRAY_BUFFER, Vertices.size() * sizeof(PositionTextureColorVertex),
+                     Vertices.data(), GL_STREAM_DRAW);
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        glEnableClientState(GL_COLOR_ARRAY);
+        glVertexPointer(2, GL_FLOAT, sizeof(PositionTextureColorVertex),
+                        reinterpret_cast<void*>(offsetof(PositionTextureColorVertex, Position)));
+        glTexCoordPointer(2, GL_FLOAT, sizeof(PositionTextureColorVertex),
+                          reinterpret_cast<void*>(offsetof(PositionTextureColorVertex, TextureCoordinates)));
+        glColorPointer(4, GL_FLOAT, sizeof(PositionTextureColorVertex),
+                       reinterpret_cast<void*>(offsetof(PositionTextureColorVertex, Color)));
+        glDrawArrays(mode, 0, static_cast<GLsizei>(Vertices.size()));
+        glPopClientAttrib();
+        glBindBuffer(GL_ARRAY_BUFFER, previousBuffer);
+        Vertices.clear();
     }
     void Renderer2D::Draw(const RenderCommand2D& command)
     {
@@ -278,6 +333,7 @@ namespace Comfy::Render
             Draw(command);
             return;
         }
+        impl->Flush();
         Detail::SpriteQuadVertices quad;
         const vec2 size = vec2(mask.TexView.Texture->GetSize());
         quad.SetValues(mask.Position, mask.SourceRegion, size, -mask.Origin,
@@ -333,6 +389,7 @@ namespace Comfy::Render
                                         const vec4& color, float precision)
     {
         Detail::SpriteQuadVertices quad;
+        impl->Flush();
         const vec4 colors[] = {color, color, color, color};
         quad.SetValues(position, vec4(0, 0, size), size, -origin, rotation, scale, colors, true, false);
         glUseProgram(impl->CheckerboardProgram);
@@ -349,6 +406,7 @@ namespace Comfy::Render
     }
     void Renderer2D::End()
     {
+        impl->Flush();
         if (impl->Target->Param.PostProcessingEnabled)
         {
             const auto& settings = impl->Target->Param.PostProcessing;

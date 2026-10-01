@@ -4,6 +4,7 @@
 #include "System/ComfyData.h"
 #include "OpenGL.h"
 #include <SDL.h>
+#include <cstddef>
 
 #include "FontIcons.h"
 
@@ -81,31 +82,65 @@ namespace ImGui
         const int height = int(data->DisplaySize.y * data->FramebufferScale.y);
         if (width <= 0 || height <= 0)
             return;
+        GLint previousArrayBuffer, previousIndexBuffer, previousProgram;
+        glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousArrayBuffer);
+        glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &previousIndexBuffer);
+        // Buffers live with this ImGui context, and are released in Dispose().
+        auto* buffers = static_cast<GLuint*>(GetIO().BackendRendererUserData);
+        glPushClientAttrib(GL_CLIENT_VERTEX_ARRAY_BIT);
+        glBindBuffer(GL_ARRAY_BUFFER, buffers[0]);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[1]);
+        glClientActiveTexture(GL_TEXTURE0);
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        glEnableClientState(GL_COLOR_ARRAY);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, width, height);
         glPushAttrib(GL_ALL_ATTRIB_BITS);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
-        glEnable(GL_SCISSOR_TEST);
-        glEnable(GL_TEXTURE_2D);
         glMatrixMode(GL_PROJECTION);
         glPushMatrix();
-        glLoadIdentity();
-        glOrtho(data->DisplayPos.x, data->DisplayPos.x + data->DisplaySize.x,
-                data->DisplayPos.y + data->DisplaySize.y, data->DisplayPos.y, -1, 1);
         glMatrixMode(GL_MODELVIEW);
         glPushMatrix();
-        glLoadIdentity();
+        const auto setupRenderState = [&]()
+        {
+            glUseProgram(0);
+            glActiveTexture(GL_TEXTURE0);
+            glClientActiveTexture(GL_TEXTURE0);
+            glBindBuffer(GL_ARRAY_BUFFER, buffers[0]);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[1]);
+            glEnableClientState(GL_VERTEX_ARRAY);
+            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+            glEnableClientState(GL_COLOR_ARRAY);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
+            glEnable(GL_SCISSOR_TEST);
+            glEnable(GL_TEXTURE_2D);
+            glViewport(0, 0, width, height);
+            glMatrixMode(GL_PROJECTION);
+            glLoadIdentity();
+            glOrtho(data->DisplayPos.x, data->DisplayPos.x + data->DisplaySize.x,
+                    data->DisplayPos.y + data->DisplaySize.y, data->DisplayPos.y, -1, 1);
+            glMatrixMode(GL_MODELVIEW);
+            glLoadIdentity();
+        };
+        setupRenderState();
         for (int listIndex = 0; listIndex < data->CmdListsCount; listIndex++)
         {
             const auto* list = data->CmdLists[listIndex];
+            glBufferData(GL_ARRAY_BUFFER, list->VtxBuffer.Size * sizeof(ImDrawVert),
+                         list->VtxBuffer.Data, GL_STREAM_DRAW);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, list->IdxBuffer.Size * sizeof(ImDrawIdx),
+                         list->IdxBuffer.Data, GL_STREAM_DRAW);
             for (const auto& command : list->CmdBuffer)
             {
                 if (command.UserCallback)
                 {
-                    if (command.UserCallback != ImDrawCallback_ResetRenderState)
+                    if (command.UserCallback == ImDrawCallback_ResetRenderState)
+                        setupRenderState();
+                    else
                         command.UserCallback(list, &command);
                     continue;
                 }
@@ -115,15 +150,16 @@ namespace ImGui
                 const float bottom = (command.ClipRect.w - data->DisplayPos.y) * data->FramebufferScale.y;
                 glScissor(int(left), int(height - bottom), Max(0, int(right - left)), Max(0, int(bottom - top)));
                 glBindTexture(GL_TEXTURE_2D, GLuint(command.TextureId.Data.ResourceView));
-                glBegin(GL_TRIANGLES);
-                for (unsigned index = 0; index < command.ElemCount; index++)
-                {
-                    const auto& vertex = list->VtxBuffer[list->IdxBuffer[command.IdxOffset + index] + command.VtxOffset];
-                    glColor4ubv(reinterpret_cast<const GLubyte*>(&vertex.col));
-                    glTexCoord2f(vertex.uv.x, vertex.uv.y);
-                    glVertex2f(vertex.pos.x, vertex.pos.y);
-                }
-                glEnd();
+                const size_t base = command.VtxOffset * sizeof(ImDrawVert);
+                glVertexPointer(2, GL_FLOAT, sizeof(ImDrawVert),
+                                reinterpret_cast<void*>(base + offsetof(ImDrawVert, pos)));
+                glTexCoordPointer(2, GL_FLOAT, sizeof(ImDrawVert),
+                                  reinterpret_cast<void*>(base + offsetof(ImDrawVert, uv)));
+                glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(ImDrawVert),
+                               reinterpret_cast<void*>(base + offsetof(ImDrawVert, col)));
+                const GLenum indexType = sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
+                glDrawElements(GL_TRIANGLES, command.ElemCount, indexType,
+                               reinterpret_cast<void*>(command.IdxOffset * sizeof(ImDrawIdx)));
             }
         }
         glMatrixMode(GL_MODELVIEW);
@@ -131,10 +167,18 @@ namespace ImGui
         glMatrixMode(GL_PROJECTION);
         glPopMatrix();
         glPopAttrib();
+        glUseProgram(previousProgram);
+        glPopClientAttrib();
+        glBindBuffer(GL_ARRAY_BUFFER, previousArrayBuffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, previousIndexBuffer);
     }
 
 	void GuiRenderer::Dispose()
 	{
+        auto* buffers = static_cast<GLuint*>(GetIO().BackendRendererUserData);
+        glDeleteBuffers(2, buffers);
+        delete[] buffers;
+        GetIO().BackendRendererUserData = nullptr;
         const GLuint texture = GLuint(GetIO().Fonts->TexID.Data.ResourceView);
         glDeleteTextures(1, &texture);
         DestroyContext();
@@ -268,6 +312,9 @@ namespace ImGui
         auto& io = GetIO();
         io.BackendPlatformName = "comfy_sdl2";
         io.BackendRendererName = "comfy_opengl";
+        auto* buffers = new GLuint[2]{};
+        glGenBuffers(2, buffers);
+        io.BackendRendererUserData = buffers;
         io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
         const int keyMap[] = {0x09, 0x25, 0x27, 0x26, 0x28, 0x21, 0x22, 0x24, 0x23, 0x2d, 0x2e, 0x08, 0x20, 0x0d, 0x1b, 0x0d, 'A', 'C', 'V', 'X', 'Y', 'Z'};
         for (int key = 0; key < ImGuiKey_COUNT; key++)

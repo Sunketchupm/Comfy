@@ -101,6 +101,8 @@ namespace Comfy
         // after successfully loading the OpenGL entry points.
         if (glewStatus != GLEW_OK && (!glGenFramebuffers || !glBindFramebuffer))
             throw std::runtime_error(reinterpret_cast<const char*>(glewGetErrorString(glewStatus)));
+        SDL_Log("OpenGL vendor: %s; renderer: %s; version: %s",
+                glGetString(GL_VENDOR), glGetString(GL_RENDERER), glGetString(GL_VERSION));
         TimeSpan::InitializeClock();
         if (!impl->Renderer.Initialize())
             throw std::runtime_error("Could not initialize the GUI");

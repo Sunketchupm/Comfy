@@ -81,6 +81,30 @@ These checks exercise Unicode file I/O, archive AES decryption, DDS texture deco
 
 The initial Linux port focuses on the chart editor. The unfinished Aet and 3D/PV editors are excluded. Docking works inside the main window; detached OS-level ImGui windows are not implemented. SDL provides shared audio device access with a minimum 1024-frame buffer (about 23 ms at 44.1 kHz) to allow for desktop scheduling jitter; smaller saved buffer requests are raised to this minimum. Buffer requests are rounded up to a power of two. WASAPI exclusive mode is available only on Windows. Video previews use the separate chart song for audio, as the Windows player does. Linux video file opening runs synchronously; decoding and seeking run on a worker thread. Rapid timeline seeks replace pending requests, and the preview keeps its previous frame until the new one is ready. Ordinary playback updates do not cancel a pending decode. MSAA and some less common Aet blend modes do not yet match the Windows renderer. Offline YACbCr texture export is unavailable; existing YACbCr game textures can be decoded. Optional Discord rich presence needs a separately supplied `libdiscord_game_sdk.so`.
 
+## Linux rendering performance
+
+The Linux UI uploads ImGui vertex and index lists to GPU buffers and issues indexed draws, preserving clipping and vertex offsets. The chart renderer batches consecutive compatible sprites and primitives into streamed vertex buffers. Texture, sampler filter/addressing, blend mode, and topology changes end a batch. Masked sprites, checkerboards, and post-processing also flush pending geometry to preserve draw order. Strips and fans remain separate draws. This removes per-vertex immediate-mode calls from the ordinary UI/chart paths and reduces repeated sprite state changes. Buffer storage is replaced for each upload so the driver can retain storage still referenced by queued draws, following [Khronos buffer streaming guidance](https://wikis.khronos.org/opengl/Buffer_Object_Streaming).
+
+Startup prints the OpenGL vendor, renderer, and version to stderr. Check this when comparing Linux with Wine: `llvmpipe` or `softpipe` means CPU software rendering, while a hardware renderer should identify the graphics device. The application uses the GPU selected by SDL and the graphics driver; it does not override desktop GPU selection. Lower GPU utilization alone does not establish a performance problem: compare frame times with the same chart, preview resolution, video, and swap interval. For an uncapped comparison, select **Swap Interval 0** from the application's swap interval menu in both versions. VSync defaults to interval 1; the Linux loop also delays 5 ms when unfocused or when main-loop power sleep is requested.
+
+Build the tests with `python tools/build-linux.py --test`, then run the isolated sprite submission benchmark from the build directory:
+
+```sh
+cd build/linux
+./LinuxTests --render-benchmark
+```
+
+The benchmark compares the previous immediate-mode vertex submission with the batched path for 2,000 six-vertex sprites over 20 frames, after warmup. It waits for rendering completion and verifies identical pixels. This is a synthetic submission benchmark, not a whole-editor or Windows comparison. For automated software-renderer testing, prefix it with `SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy`. The normal frame loop never calls the benchmark's `glFinish` synchronization.
+
+Other candidates for profiling remain:
+
+- **Video:** FFmpeg decodes on a worker using a CPU decoder, converts displayed frames to RGBA with `sws_scale`, allocates a frame-sized buffer, and uploads the pixels. GPU texture reuse already avoids repeated texture allocation, but hardware decoding or GPU YUV conversion would require a separate implementation.
+- **Large charts:** `TargetTimeline::DrawTimelineTargets` walks targets from the beginning before skipping those left of the visible region. Button-sound playback also scans the target list each update. A time-range lookup could reduce this work for long charts; these shared paths also run on Windows.
+- **Text borders:** Each bordered glyph still generates eight offset copies plus its original. Batching reduces submission cost, but a shader-based outline could reduce geometry and overdraw.
+- **Special effects:** Masked sprites and checkerboards retain individual immediate-mode shader draws, and shader uniform locations are looked up repeatedly. These paths are excluded from the ordinary sprite batching optimization.
+
+The rendering tests cover batch capacity rollover, overlapping blend changes, sampler filter changes on a shared texture, masked draw order, atlas orientation, and line-grid topology. Physical GPU utilization and compositor pacing must be measured on a desktop with GPU access.
+
 ## Building with Visual Studio 2026
 
 On Windows, install the latest stable Visual Studio 2026 with the **Desktop development with C++** workload, the latest **MSVC v145 C++ x64/x86 build tools**, and a Windows SDK.
