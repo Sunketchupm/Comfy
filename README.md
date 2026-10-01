@@ -1,5 +1,5 @@
-## Developer notes
-The update to VS2026 and the port to be linux buildable are entirely vibecoded. There will be bugs and the vast majority of them I do not understand. Other changes made in this fork may be AI assisted, but mostly done by me.
+## Disclaimer
+The majority of changes are entirely vibecoded. There will be bugs and the vast majority of them I do not understand. All of the commits I make that include "vibe" in its name are vibecoded commits.
 
 ## Comfy... Studio?
 Comfy Studio is a *totally epic ⚡⚡* Chart Editor for creating custom Project DIVA Arcade-Style charts for use in modding.  *Holy smokes*, would you believe it!
